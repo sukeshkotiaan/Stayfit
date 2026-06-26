@@ -8043,6 +8043,410 @@ function RestTimer({ S, COLORS, FONTS, userId, onCalorieSaved }) {
 // ── MealFoodEntry ─────────────────────────────────────────────────────────────
 // Layout order: [Time AM/PM] → [Search food] → [Qty pills] → [Calories] → [Add]
 
+// ── AIChatCoach ───────────────────────────────────────────────────────────────
+function AIChatCoach({ profile, metrics, COLORS, FONTS, S }) {
+  const [open, setOpen]       = useState(false);
+  const [messages, setMessages] = useState([
+    { role:"assistant", text:"Hi! I'm your AI health coach 👋 Ask me anything about diet, weight loss, workouts, or your health goals." }
+  ]);
+  const [input, setInput]     = useState("");
+  const [loading, setLoading] = useState(false);
+  const bottomRef             = useRef(null);
+
+  useEffect(() => {
+    if (open) bottomRef.current?.scrollIntoView({ behavior:"smooth" });
+  }, [messages, open]);
+
+  const send = async () => {
+    const text = input.trim();
+    if (!text || loading) return;
+    setInput("");
+    const userMsg = { role:"user", text };
+    setMessages(prev => [...prev, userMsg]);
+    setLoading(true);
+
+    try {
+      // Keep last 5 exchanges for context (10 messages)
+      const history = [...messages.slice(-10), userMsg];
+      const context = `You are a friendly, concise AI health and fitness coach. User profile: weight ${profile?.weight||"?"}kg, height ${profile?.height||"?"}cm, age ${profile?.age||"?"}, goal: ${profile?.goal||"?"}, fitness level: ${profile?.fitnessLevel||"?"}${metrics?.bmi ? `, BMI: ${metrics.bmi}` : ""}. Give short, practical, personalized answers. Max 3-4 sentences.`;
+      const historyText = history.map(m => `${m.role === "user" ? "User" : "Coach"}: ${m.text}`).join("\n");
+      const prompt = `${context}\n\nConversation:\n${historyText}\nCoach:`;
+      const { text: reply } = await callAI(prompt, 500);
+      setMessages(prev => [...prev, { role:"assistant", text: reply }]);
+    } catch {
+      setMessages(prev => [...prev, { role:"assistant", text:"Sorry, I'm having trouble connecting right now. Please try again in a moment." }]);
+    }
+    setLoading(false);
+  };
+
+  return (
+    <>
+      {/* Floating button */}
+      <button onClick={() => setOpen(o => !o)}
+        style={{ position:"fixed", bottom:90, right:16, zIndex:1100,
+          width:52, height:52, borderRadius:"50%", border:"none",
+          background:`linear-gradient(135deg, ${COLORS.accent}, ${COLORS.accent2})`,
+          color:"#fff", fontSize:22, cursor:"pointer", boxShadow:"0 4px 20px rgba(0,0,0,0.4)",
+          display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+        {open ? "✕" : "🤖"}
+      </button>
+
+      {/* Chat panel */}
+      {open && (
+        <div style={{ position:"fixed", bottom:150, right:12, left:12, zIndex:1099,
+          maxWidth:420, margin:"0 auto",
+          background: COLORS.card, border:`1px solid ${COLORS.border}`,
+          borderRadius:20, overflow:"hidden",
+          boxShadow:"0 20px 60px rgba(0,0,0,0.6)",
+          display:"flex", flexDirection:"column", maxHeight:"65vh" }}>
+
+          {/* Header */}
+          <div style={{ padding:"12px 16px", borderBottom:`1px solid ${COLORS.border}`,
+            background:`linear-gradient(135deg, ${COLORS.accent}18, ${COLORS.accent2}18)`,
+            display:"flex", alignItems:"center", gap:10 }}>
+            <span style={{ fontSize:22 }}>🤖</span>
+            <div>
+              <div style={{ fontWeight:700, fontSize:14, color:COLORS.text }}>AI Health Coach</div>
+              <div style={{ fontSize:11, color:COLORS.success }}>● Online · Powered by AI</div>
+            </div>
+          </div>
+
+          {/* Messages */}
+          <div style={{ flex:1, overflowY:"auto", padding:"12px 14px", display:"flex", flexDirection:"column", gap:10 }}>
+            {messages.map((m, i) => (
+              <div key={i} style={{ display:"flex", justifyContent: m.role==="user" ? "flex-end" : "flex-start" }}>
+                <div style={{
+                  maxWidth:"82%", padding:"10px 13px", borderRadius: m.role==="user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
+                  background: m.role==="user" ? `linear-gradient(135deg, ${COLORS.accent}, ${COLORS.accent2})` : COLORS.card3,
+                  color: m.role==="user" ? "#fff" : COLORS.text,
+                  fontSize:13, lineHeight:1.6, border: m.role==="user" ? "none" : `1px solid ${COLORS.border}`,
+                }}>
+                  {m.text}
+                </div>
+              </div>
+            ))}
+            {loading && (
+              <div style={{ display:"flex", justifyContent:"flex-start" }}>
+                <div style={{ padding:"10px 14px", borderRadius:"16px 16px 16px 4px", background:COLORS.card3, border:`1px solid ${COLORS.border}`, fontSize:18 }}>
+                  <span style={{ animation:"pulse 1s infinite" }}>●</span><span style={{ opacity:0.5 }}>●</span><span style={{ opacity:0.25 }}>●</span>
+                </div>
+              </div>
+            )}
+            <div ref={bottomRef} />
+          </div>
+
+          {/* Quick prompts */}
+          {messages.length <= 1 && (
+            <div style={{ padding:"0 12px 8px", display:"flex", gap:6, flexWrap:"wrap" }}>
+              {["What should I eat today?","How to lose weight faster?","Best exercises for me?","How much water daily?"].map(q => (
+                <button key={q} onClick={() => { setInput(q); }}
+                  style={{ fontSize:11, padding:"5px 10px", borderRadius:20, border:`1px solid ${COLORS.accent}44`,
+                    background:`${COLORS.accent}12`, color:COLORS.accent, cursor:"pointer", fontWeight:600 }}>
+                  {q}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Input */}
+          <div style={{ padding:"10px 12px", borderTop:`1px solid ${COLORS.border}`, display:"flex", gap:8 }}>
+            <input value={input} onChange={e => setInput(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && !e.shiftKey && send()}
+              placeholder="Ask your health coach..."
+              style={{ ...S.input, flex:1, fontSize:13, padding:"9px 13px", borderRadius:12 }} />
+            <button onClick={send} disabled={!input.trim() || loading}
+              style={{ width:40, height:40, borderRadius:12, background: input.trim() ? COLORS.accent : `${COLORS.accent}44`,
+                border:"none", color:"#fff", fontSize:18, cursor: input.trim() ? "pointer" : "not-allowed", flexShrink:0 }}>
+              ↑
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+// ── SmartGroceryList ──────────────────────────────────────────────────────────
+function SmartGroceryList({ profile, likedFoods, COLORS, FONTS, S }) {
+  const KEY = "sf_grocery_v1";
+  const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || "null"); } catch { return null; } };
+  const [list, setList]       = useState(load);
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen]       = useState(false);
+  const [checked, setChecked] = useState({});
+
+  const generate = async () => {
+    setLoading(true);
+    try {
+      const goal = profile?.goal || "lose weight";
+      const liked = (likedFoods || []).slice(0, 10).join(", ");
+      const prompt = `Create a practical weekly grocery list for someone who wants to ${goal}. Weight: ${profile?.weight||"?"}kg. Foods they like: ${liked || "Indian foods"}.
+
+Return ONLY valid JSON (no markdown):
+{
+  "categories": [
+    { "name": "Vegetables & Fruits", "emoji": "🥦", "items": ["...", "..."] },
+    { "name": "Proteins", "emoji": "🥚", "items": ["...", "..."] },
+    { "name": "Grains & Carbs", "emoji": "🌾", "items": ["...", "..."] },
+    { "name": "Dairy", "emoji": "🥛", "items": ["...", "..."] },
+    { "name": "Pantry Essentials", "emoji": "🫙", "items": ["...", "..."] }
+  ],
+  "tip": "<one short shopping tip>"
+}`;
+      const { text } = await callAI(prompt, 800);
+      const parsed = JSON.parse(text.trim().replace(/```json|```/g,"").trim());
+      setList(parsed);
+      setChecked({});
+      try { localStorage.setItem(KEY, JSON.stringify(parsed)); } catch {}
+    } catch (e) {
+      alert("Could not generate list. Try again.");
+    }
+    setLoading(false);
+  };
+
+  const toggleItem = (catName, item) => {
+    const key = `${catName}:${item}`;
+    setChecked(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const totalItems  = list ? list.categories.reduce((s, c) => s + c.items.length, 0) : 0;
+  const checkedCount = Object.values(checked).filter(Boolean).length;
+
+  return (
+    <div style={{ ...S.metricCard, marginBottom:14, border:`1px solid ${COLORS.success}33` }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer" }} onClick={() => setOpen(o=>!o)}>
+        <div>
+          <div style={{ fontFamily:FONTS?.head, fontSize:13, fontWeight:700, color:COLORS.success }}>🛒 Smart Grocery List</div>
+          <div style={{ fontSize:11, color:COLORS.muted, marginTop:2 }}>
+            {list ? `${checkedCount}/${totalItems} items picked · AI-generated for your goal` : "AI generates a weekly grocery list for your goal"}
+          </div>
+        </div>
+        <span style={{ fontSize:16, color:COLORS.muted, transform:open?"rotate(180deg)":"none", transition:"transform 0.2s" }}>▾</span>
+      </div>
+
+      {open && (
+        <div style={{ marginTop:14 }}>
+          <div style={{ display:"flex", gap:8, marginBottom:14 }}>
+            <button onClick={generate} disabled={loading}
+              style={{ flex:1, padding:"10px", borderRadius:10, border:"none",
+                background: loading ? `${COLORS.success}44` : COLORS.success,
+                color:"#fff", fontWeight:700, fontSize:13, cursor: loading ? "not-allowed" : "pointer" }}>
+              {loading ? "🤖 Generating..." : list ? "🔄 Regenerate List" : "✨ Generate My List"}
+            </button>
+            {list && checkedCount > 0 && (
+              <button onClick={() => setChecked({})}
+                style={{ padding:"10px 14px", borderRadius:10, border:`1px solid ${COLORS.border}`,
+                  background:"transparent", color:COLORS.muted, fontSize:12, cursor:"pointer" }}>
+                Reset
+              </button>
+            )}
+          </div>
+
+          {list && (
+            <>
+              {/* Progress bar */}
+              <div style={{ height:4, borderRadius:4, background:`${COLORS.success}22`, marginBottom:14, overflow:"hidden" }}>
+                <div style={{ height:"100%", width:`${totalItems ? (checkedCount/totalItems)*100 : 0}%`,
+                  background:COLORS.success, borderRadius:4, transition:"width 0.3s" }} />
+              </div>
+
+              {list.categories.map(cat => (
+                <div key={cat.name} style={{ marginBottom:12 }}>
+                  <div style={{ fontSize:12, fontWeight:700, color:COLORS.text, marginBottom:6, display:"flex", alignItems:"center", gap:6 }}>
+                    <span>{cat.emoji}</span> {cat.name}
+                  </div>
+                  <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                    {cat.items.map(item => {
+                      const key = `${cat.name}:${item}`;
+                      const done = !!checked[key];
+                      return (
+                        <button key={item} onClick={() => toggleItem(cat.name, item)}
+                          style={{ padding:"6px 12px", borderRadius:20, fontSize:12, cursor:"pointer",
+                            background: done ? `${COLORS.success}20` : COLORS.card3,
+                            border: `1px solid ${done ? COLORS.success+"66" : COLORS.border}`,
+                            color: done ? COLORS.success : COLORS.text,
+                            textDecoration: done ? "line-through" : "none",
+                            opacity: done ? 0.7 : 1, transition:"all 0.15s" }}>
+                          {done ? "✓ " : ""}{item}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+
+              {list.tip && (
+                <div style={{ marginTop:8, padding:"10px 12px", borderRadius:8,
+                  background:`${COLORS.accent2}10`, border:`1px solid ${COLORS.accent2}33`,
+                  fontSize:12, color:COLORS.text }}>
+                  💡 {list.tip}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── GroupChallenges ────────────────────────────────────────────────────────────
+function GroupChallenges({ currentUser, userLogs, calorieBurns, foodLogs, COLORS, FONTS, S, notify }) {
+  const CHALLENGE_TEMPLATES = [
+    { title:"10,000 Steps Daily", emoji:"👟", type:"steps", goal:10000, duration:7, desc:"Walk 10,000 steps every day for a week" },
+    { title:"No Junk Food Week", emoji:"🚫", type:"nojunk", goal:7, duration:7, desc:"Log food daily with no junk — 7 days clean" },
+    { title:"Lose 2kg This Month", emoji:"⚖️", type:"weight", goal:2, duration:30, desc:"Lose 2kg in 30 days through diet & exercise" },
+    { title:"Burn 3000 kcal Week", emoji:"🔥", type:"burn", goal:3000, duration:7, desc:"Burn 3000 calories through exercise this week" },
+    { title:"Log Every Meal 7 Days", emoji:"📋", type:"logs", goal:7, duration:7, desc:"Log breakfast, lunch & dinner every day for a week" },
+    { title:"30-Day Weight Log Streak", emoji:"📅", type:"streak", goal:30, duration:30, desc:"Log your weight every day for 30 days straight" },
+  ];
+
+  const KEY = `sf_gchallenges_v2`;
+  const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || "[]"); } catch { return []; } };
+  const [challenges, setChallenges] = useState(load);
+  const [creating, setCreating]     = useState(false);
+  const [template, setTemplate]     = useState(null);
+  const [customTitle, setCustomTitle] = useState("");
+  const [open, setOpen]             = useState(true);
+
+  const saveAll = (next) => {
+    setChallenges(next);
+    try { localStorage.setItem(KEY, JSON.stringify(next)); } catch {}
+  };
+
+  const joinChallenge = (tmpl) => {
+    const already = challenges.find(c => c.title === tmpl.title && c.userId === currentUser.id);
+    if (already) { notify("You're already in this challenge!"); return; }
+    const c = {
+      id: Date.now(),
+      userId: currentUser.id,
+      userName: currentUser.name,
+      title: tmpl.title,
+      emoji: tmpl.emoji,
+      type: tmpl.type,
+      goal: tmpl.goal,
+      duration: tmpl.duration,
+      desc: tmpl.desc,
+      startDate: new Date().toISOString().slice(0,10),
+      endDate: new Date(Date.now() + tmpl.duration * 86400000).toISOString().slice(0,10),
+    };
+    saveAll([c, ...challenges]);
+    notify(`✅ Joined "${tmpl.title}"!`);
+    setCreating(false);
+  };
+
+  const leaveChallenge = (id) => saveAll(challenges.filter(c => c.id !== id));
+
+  const getProgress = (c) => {
+    const start = new Date(c.startDate);
+    const end   = new Date(c.endDate);
+    const now   = new Date();
+    const daysLeft = Math.max(0, Math.ceil((end - now) / 86400000));
+    const isExpired = now > end;
+
+    let current = 0;
+    if (c.type === "steps") {
+      current = Math.round(calorieBurns.filter(b => b.date >= c.startDate && b.date <= c.endDate && b.activity?.toLowerCase().includes("step")).reduce((s,b) => s + (b.calories / 0.00035 / 70), 0));
+    } else if (c.type === "burn") {
+      current = calorieBurns.filter(b => b.date >= c.startDate && b.date <= c.endDate).reduce((s,b) => s + b.calories, 0);
+    } else if (c.type === "weight") {
+      const startW = userLogs.find(l => l.date >= c.startDate)?.weight || 0;
+      const latestW = userLogs[0]?.weight || 0;
+      current = startW && latestW ? Math.max(0, +(startW - latestW).toFixed(1)) : 0;
+    } else if (c.type === "streak" || c.type === "logs") {
+      current = userLogs.filter(l => l.date >= c.startDate && l.date <= c.endDate).length;
+    } else if (c.type === "nojunk") {
+      const loggedDates = [...new Set(foodLogs.filter(f => f.logged_date >= c.startDate && f.logged_date <= c.endDate && f.health_status !== "unhealthy").map(f => f.logged_date))];
+      current = loggedDates.length;
+    }
+
+    const pct = Math.min(100, Math.round((current / c.goal) * 100));
+    return { current, pct, daysLeft, isExpired, achieved: current >= c.goal };
+  };
+
+  const myChallenges = challenges.filter(c => c.userId === currentUser.id);
+
+  return (
+    <div style={{ ...S.metricCard, marginBottom:14, border:`1px solid ${COLORS.gold}33` }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer", marginBottom: open ? 14 : 0 }} onClick={() => setOpen(o=>!o)}>
+        <div>
+          <div style={{ fontFamily:FONTS?.head, fontSize:13, fontWeight:700, color:COLORS.gold }}>🏆 Group Challenges</div>
+          <div style={{ fontSize:11, color:COLORS.muted, marginTop:2 }}>{myChallenges.length} active · tap to compete & track progress</div>
+        </div>
+        <span style={{ fontSize:16, color:COLORS.muted, transform:open?"rotate(180deg)":"none", transition:"transform 0.2s" }}>▾</span>
+      </div>
+
+      {open && (
+        <>
+          {/* Active challenges */}
+          {myChallenges.map(c => {
+            const { current, pct, daysLeft, isExpired, achieved } = getProgress(c);
+            const barColor = achieved ? COLORS.success : isExpired ? COLORS.muted : COLORS.gold;
+            return (
+              <div key={c.id} style={{ padding:"12px 14px", borderRadius:12, border:`1px solid ${barColor}44`,
+                background:`${barColor}08`, marginBottom:10 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:8 }}>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                      <span style={{ fontSize:18 }}>{c.emoji}</span>
+                      <span style={{ fontSize:13, fontWeight:700, color:COLORS.text }}>{c.title}</span>
+                      {achieved && <span style={{ fontSize:11, padding:"2px 8px", borderRadius:10, background:`${COLORS.success}20`, color:COLORS.success, fontWeight:700 }}>✅ Done!</span>}
+                      {isExpired && !achieved && <span style={{ fontSize:11, padding:"2px 8px", borderRadius:10, background:`${COLORS.muted}20`, color:COLORS.muted, fontWeight:700 }}>Ended</span>}
+                    </div>
+                    <div style={{ fontSize:11, color:COLORS.muted, marginTop:2 }}>{c.desc}</div>
+                  </div>
+                  <button onClick={() => leaveChallenge(c.id)}
+                    style={{ background:"transparent", border:"none", color:COLORS.muted, fontSize:16, cursor:"pointer", flexShrink:0 }}>✕</button>
+                </div>
+                {/* Progress bar */}
+                <div style={{ height:6, borderRadius:6, background:`${barColor}22`, overflow:"hidden", marginBottom:6 }}>
+                  <div style={{ height:"100%", width:`${pct}%`, background:barColor, borderRadius:6, transition:"width 0.4s" }} />
+                </div>
+                <div style={{ display:"flex", justifyContent:"space-between", fontSize:11 }}>
+                  <span style={{ color:barColor, fontWeight:700 }}>{current} / {c.goal} {c.type === "weight" ? "kg" : c.type === "burn" ? "kcal" : c.type === "steps" ? "steps" : "days"}</span>
+                  <span style={{ color:COLORS.muted }}>{isExpired ? "Challenge ended" : `${daysLeft} days left`}</span>
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Join a challenge */}
+          {!creating ? (
+            <button onClick={() => setCreating(true)}
+              style={{ width:"100%", padding:"10px", borderRadius:10, border:`1.5px dashed ${COLORS.gold}66`,
+                background:`${COLORS.gold}10`, color:COLORS.gold, fontWeight:700, fontSize:13, cursor:"pointer" }}>
+              + Join a Challenge
+            </button>
+          ) : (
+            <div style={{ border:`1px solid ${COLORS.gold}44`, borderRadius:12, padding:"14px" }}>
+              <div style={{ fontWeight:700, fontSize:13, color:COLORS.gold, marginBottom:12 }}>Choose a Challenge</div>
+              <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                {CHALLENGE_TEMPLATES.map(t => (
+                  <button key={t.title} onClick={() => joinChallenge(t)}
+                    style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 12px",
+                      borderRadius:10, border:`1px solid ${COLORS.gold}33`, background:COLORS.card3,
+                      cursor:"pointer", textAlign:"left" }}>
+                    <span style={{ fontSize:22, flexShrink:0 }}>{t.emoji}</span>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:13, fontWeight:700, color:COLORS.text }}>{t.title}</div>
+                      <div style={{ fontSize:11, color:COLORS.muted }}>{t.desc}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => setCreating(false)}
+                style={{ marginTop:10, width:"100%", padding:"8px", borderRadius:8, border:`1px solid ${COLORS.border}`,
+                  background:"transparent", color:COLORS.muted, fontSize:12, cursor:"pointer" }}>
+                Cancel
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── ProgressPhotos ────────────────────────────────────────────────────────────
 function ProgressPhotos({ userId, COLORS, FONTS, S }) {
   const KEY = `sf_photos_${userId}`;
@@ -11014,6 +11418,9 @@ function App() {
               {/* Habit Tracker */}
               <HabitTracker COLORS={COLORS} FONTS={FONTS} S={S} />
 
+              {/* Smart Grocery List */}
+              <SmartGroceryList profile={profile} likedFoods={likedFoods} COLORS={COLORS} FONTS={FONTS} S={S} />
+
               {/* Steps → Calorie Burn */}
               <StepsCalorieBurn profile={profile} userId={currentUser.id} onBurnSaved={() => loadCalorieBurns(currentUser.id)} COLORS={COLORS} FONTS={FONTS} S={S} />
 
@@ -11538,6 +11945,11 @@ function App() {
               <div style={{ fontSize:13, color:COLORS.muted, marginBottom:16 }}>
                 Compete with others in your weight loss journey
               </div>
+              <GroupChallenges
+                currentUser={currentUser} userLogs={userLogs}
+                calorieBurns={calorieBurns} foodLogs={foodLogs}
+                COLORS={COLORS} FONTS={FONTS} S={S} notify={notify}
+              />
               <UserCompetitions
                 userId={currentUser.id}
                 userName={currentUser.name}
@@ -11571,6 +11983,9 @@ function App() {
           )}
 
           <div style={{ height:80 }} />
+
+          {/* AI Chat Coach floating button */}
+          <AIChatCoach profile={profile} metrics={metrics} COLORS={COLORS} FONTS={FONTS} S={S} />
 
           {/* Bottom nav + More drawer */}
           <div style={S.bottomNav}>
