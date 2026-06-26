@@ -367,7 +367,7 @@ const COLORS = COLORS_DARK;
 const FONTS = { head: "'Syne', sans-serif", body: "'Inter', 'DM Sans', sans-serif" };
 
 const INITIAL_USERS = [
-  { id: 1, username: "admin", password: "admin123", role: "admin", name: "Admin", active: true, createdAt: new Date().toISOString() },
+  { id: 1, username: "admin", password: "Inesh@302917", role: "admin", name: "Admin", active: true, createdAt: new Date().toISOString() },
 ];
 
 const GOALS = ["Lose weight gradually & sustainably", "Build muscle while losing fat", "Improve overall health & fitness", "Maintain current weight"];
@@ -8739,7 +8739,7 @@ function App() {
           await sbCreateUser({
             id: "admin-001",
             username: "admin",
-            password_hash: "admin123",
+            password_hash: "Inesh@302917",
             role: "admin",
             name: "Admin",
             active: true,
@@ -8947,20 +8947,20 @@ function App() {
           const adminSnap = await getDoc(doc(db, "users", "admin-001"));
           if (!adminSnap.exists()) {
             await setDoc(doc(db, "users", "admin-001"), {
-              username: "admin", password_hash: "admin123", role: "admin",
+              username: "admin", password_hash: "Inesh@302917", role: "admin",
               name: "Admin", active: true, approved: true,
               created_at: new Date().toISOString(),
             });
           }
           // Get current admin password from Firebase
-          const adminData = adminSnap.exists() ? adminSnap.data() : { password_hash: "admin123" };
+          const adminData = adminSnap.exists() ? adminSnap.data() : { password_hash: "Inesh@302917" };
           if (authForm.password !== adminData.password_hash) {
             setAuthErr("Invalid username or password");
             return;
           }
         } catch(e) {
           // Fallback to default if Firebase fails
-          if (authForm.password !== "admin123") { setAuthErr("Invalid username or password"); return; }
+          if (authForm.password !== "Inesh@302917") { setAuthErr("Invalid username or password"); return; }
         }
         const adminUser = {
           id: "admin-001", username: "admin", password_hash: authForm.password,
