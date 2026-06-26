@@ -8043,6 +8043,569 @@ function RestTimer({ S, COLORS, FONTS, userId, onCalorieSaved }) {
 // ── MealFoodEntry ─────────────────────────────────────────────────────────────
 // Layout order: [Time AM/PM] → [Search food] → [Qty pills] → [Calories] → [Add]
 
+// ── ProgressPhotos ────────────────────────────────────────────────────────────
+function ProgressPhotos({ userId, COLORS, FONTS, S }) {
+  const KEY = `sf_photos_${userId}`;
+  const loadPhotos = () => { try { return JSON.parse(localStorage.getItem(KEY) || "[]"); } catch { return []; } };
+  const [photos, setPhotos] = useState(loadPhotos);
+  const [compare, setCompare] = useState(null); // index of second photo for compare
+  const fileRef = useRef(null);
+
+  const addPhoto = (file) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const photo = { id: Date.now(), date: new Date().toISOString().slice(0,10), src: e.target.result, note: "" };
+      const next = [photo, ...photos];
+      setPhotos(next);
+      try { localStorage.setItem(KEY, JSON.stringify(next)); } catch {}
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const deletePhoto = (id) => {
+    const next = photos.filter(p => p.id !== id);
+    setPhotos(next);
+    try { localStorage.setItem(KEY, JSON.stringify(next)); } catch {}
+    if (compare === id) setCompare(null);
+  };
+
+  const [open, setOpen] = useState(false);
+  const comparePhoto = compare ? photos.find(p => p.id === compare) : null;
+
+  return (
+    <div style={{ ...S.metricCard, marginBottom:14, border:`1px solid ${COLORS.accent3}33` }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer" }} onClick={() => setOpen(o=>!o)}>
+        <div>
+          <div style={{ fontFamily:FONTS?.head, fontSize:13, fontWeight:700, color:COLORS.accent3 }}>📸 Progress Photos</div>
+          <div style={{ fontSize:11, color:COLORS.muted, marginTop:2 }}>{photos.length} photo{photos.length !== 1 ? "s" : ""} · tap to compare before & after</div>
+        </div>
+        <span style={{ fontSize:16, color:COLORS.muted, transform:open?"rotate(180deg)":"none", transition:"transform 0.2s" }}>▾</span>
+      </div>
+
+      {open && (
+        <div style={{ marginTop:14 }}>
+          <input ref={fileRef} type="file" accept="image/*" capture="user" style={{ display:"none" }}
+            onChange={e => { if (e.target.files?.[0]) addPhoto(e.target.files[0]); e.target.value = ""; }} />
+          <div style={{ display:"flex", gap:8, marginBottom:14, flexWrap:"wrap" }}>
+            <button onClick={() => fileRef.current?.click()}
+              style={{ flex:1, padding:"10px", borderRadius:10, border:`1.5px dashed ${COLORS.accent3}66`,
+                background:`${COLORS.accent3}10`, color:COLORS.accent3, fontWeight:700, fontSize:13, cursor:"pointer" }}>
+              📷 Add Photo
+            </button>
+            {compare && (
+              <button onClick={() => setCompare(null)}
+                style={{ padding:"10px 16px", borderRadius:10, border:`1px solid ${COLORS.muted}44`,
+                  background:"transparent", color:COLORS.muted, fontWeight:600, fontSize:12, cursor:"pointer" }}>
+                ✕ Clear Compare
+              </button>
+            )}
+          </div>
+
+          {/* Before/After comparison view */}
+          {compare && comparePhoto && photos.length > 0 && (
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:14 }}>
+              {[photos[0], comparePhoto].map((p, i) => (
+                <div key={p.id} style={{ borderRadius:10, overflow:"hidden", border:`2px solid ${i===0?COLORS.accent2:COLORS.accent3}66` }}>
+                  <div style={{ textAlign:"center", fontSize:10, fontWeight:700, padding:"4px", background:i===0?`${COLORS.accent2}22`:`${COLORS.accent3}22`, color:i===0?COLORS.accent2:COLORS.accent3 }}>
+                    {i===0?"NOW":p.date}
+                  </div>
+                  <img src={p.src} alt="" style={{ width:"100%", aspectRatio:"3/4", objectFit:"cover", display:"block" }} />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Photo grid */}
+          {photos.length === 0 ? (
+            <div style={{ textAlign:"center", color:COLORS.muted, fontSize:13, padding:"20px 0" }}>No photos yet. Add your first progress photo!</div>
+          ) : (
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(100px,1fr))", gap:8 }}>
+              {photos.map((p, i) => (
+                <div key={p.id} style={{ position:"relative", borderRadius:10, overflow:"hidden",
+                  border:`2px solid ${compare===p.id?COLORS.accent3:COLORS.border}`, cursor:"pointer" }}
+                  onClick={() => setCompare(compare === p.id ? null : p.id)}>
+                  <img src={p.src} alt="" style={{ width:"100%", aspectRatio:"1", objectFit:"cover", display:"block" }} />
+                  <div style={{ position:"absolute", bottom:0, left:0, right:0, background:"rgba(0,0,0,0.6)", padding:"3px 6px", fontSize:10, color:"#fff", textAlign:"center" }}>
+                    {p.date}
+                    {i===0 && <span style={{ marginLeft:4, color:COLORS.accent2, fontWeight:700 }}>LATEST</span>}
+                  </div>
+                  <button onClick={e => { e.stopPropagation(); deletePhoto(p.id); }}
+                    style={{ position:"absolute", top:4, right:4, background:"rgba(0,0,0,0.7)", border:"none", color:"#fff",
+                      borderRadius:"50%", width:20, height:20, fontSize:11, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+                </div>
+              ))}
+            </div>
+          )}
+          {photos.length >= 2 && !compare && (
+            <div style={{ fontSize:11, color:COLORS.muted, textAlign:"center", marginTop:8 }}>Tap any older photo to compare with your latest</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── BloodReportAnalysis ────────────────────────────────────────────────────────
+function BloodReportAnalysis({ COLORS, FONTS, S }) {
+  const [loading, setLoading] = useState(false);
+  const [result, setResult]   = useState(null);
+  const [error, setError]     = useState("");
+  const [open, setOpen]       = useState(false);
+  const fileRef = useRef(null);
+
+  const analyzeReport = async (file) => {
+    setLoading(true); setError(""); setResult(null);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const base64 = e.target.result.split(",")[1];
+        const prompt = `You are a medical report interpreter (not a doctor). Look at this blood test report image and explain each parameter in simple language. For each value, say if it's Normal, Low, or High and what it means for health.
+
+Return ONLY valid JSON (no markdown):
+{
+  "summary": "<2-3 sentence overall summary in plain English>",
+  "parameters": [
+    { "name": "<parameter name>", "value": "<value with unit>", "status": "Normal|Low|High", "meaning": "<1 sentence plain English explanation>" }
+  ],
+  "advice": "<2-3 sentences of general lifestyle advice based on these results>"
+}`;
+        try {
+          const { text } = await callAI(prompt, 2000, base64);
+          const parsed = JSON.parse(text.trim().replace(/```json|```/g,"").trim());
+          setResult(parsed);
+        } catch (err) {
+          setError("Could not analyze the report. Make sure the image is clear and shows blood test values.");
+        }
+        setLoading(false);
+      };
+      reader.readAsDataURL(file);
+    } catch {
+      setLoading(false);
+      setError("Failed to read the file.");
+    }
+  };
+
+  const statusColor = (s) => s === "Normal" ? COLORS.success : s === "High" ? COLORS.warn : COLORS.accent3;
+
+  return (
+    <div style={{ ...S.metricCard, marginBottom:14, border:`1px solid ${COLORS.accent2}33` }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer" }} onClick={() => setOpen(o=>!o)}>
+        <div>
+          <div style={{ fontFamily:FONTS?.head, fontSize:13, fontWeight:700, color:COLORS.accent2 }}>🩸 Blood Report Analysis</div>
+          <div style={{ fontSize:11, color:COLORS.muted, marginTop:2 }}>Upload your blood test — AI explains results in plain English</div>
+        </div>
+        <span style={{ fontSize:16, color:COLORS.muted, transform:open?"rotate(180deg)":"none", transition:"transform 0.2s" }}>▾</span>
+      </div>
+
+      {open && (
+        <div style={{ marginTop:14 }}>
+          <input ref={fileRef} type="file" accept="image/*,application/pdf" style={{ display:"none" }}
+            onChange={e => { if (e.target.files?.[0]) analyzeReport(e.target.files[0]); e.target.value = ""; }} />
+
+          <button onClick={() => fileRef.current?.click()} disabled={loading}
+            style={{ width:"100%", padding:"12px", borderRadius:10, border:`1.5px dashed ${COLORS.accent2}66`,
+              background:`${COLORS.accent2}10`, color:COLORS.accent2, fontWeight:700, fontSize:13,
+              cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1 }}>
+            {loading ? "🤖 Analyzing your report..." : "📤 Upload Blood Report (Photo or PDF)"}
+          </button>
+
+          <div style={{ fontSize:11, color:COLORS.muted, textAlign:"center", marginTop:6 }}>
+            📌 This is for informational purposes only. Always consult your doctor.
+          </div>
+
+          {error && (
+            <div style={{ marginTop:12, padding:"10px 14px", background:`${COLORS.warn}15`, border:`1px solid ${COLORS.warn}44`,
+              borderRadius:8, color:COLORS.warn, fontSize:13 }}>{error}</div>
+          )}
+
+          {result && (
+            <div style={{ marginTop:14 }}>
+              {/* Summary */}
+              <div style={{ padding:"12px 14px", background:`${COLORS.accent2}10`, borderRadius:10, border:`1px solid ${COLORS.accent2}33`, marginBottom:12 }}>
+                <div style={{ fontSize:12, fontWeight:700, color:COLORS.accent2, marginBottom:4 }}>📋 Summary</div>
+                <div style={{ fontSize:13, color:COLORS.text, lineHeight:1.7 }}>{result.summary}</div>
+              </div>
+
+              {/* Parameters */}
+              <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:12 }}>
+                {(result.parameters || []).map((p, i) => (
+                  <div key={i} style={{ display:"flex", gap:12, alignItems:"flex-start", padding:"10px 12px",
+                    borderRadius:8, background:`${statusColor(p.status)}0d`, border:`1px solid ${statusColor(p.status)}33` }}>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+                        <span style={{ fontSize:13, fontWeight:700, color:COLORS.text }}>{p.name}</span>
+                        <span style={{ fontSize:11, fontWeight:700, color:statusColor(p.status), background:`${statusColor(p.status)}20`, padding:"2px 8px", borderRadius:10 }}>
+                          {p.status === "Normal" ? "✅" : p.status === "High" ? "⬆️" : "⬇️"} {p.status}
+                        </span>
+                      </div>
+                      <div style={{ fontSize:12, color:COLORS.muted, marginTop:2 }}>{p.value} · {p.meaning}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Advice */}
+              <div style={{ padding:"12px 14px", background:`${COLORS.success}0d`, borderRadius:10, border:`1px solid ${COLORS.success}33` }}>
+                <div style={{ fontSize:12, fontWeight:700, color:COLORS.success, marginBottom:4 }}>💡 Lifestyle Advice</div>
+                <div style={{ fontSize:13, color:COLORS.text, lineHeight:1.7 }}>{result.advice}</div>
+              </div>
+
+              <button onClick={() => setResult(null)}
+                style={{ marginTop:10, width:"100%", padding:"8px", borderRadius:8, border:`1px solid ${COLORS.border}`,
+                  background:"transparent", color:COLORS.muted, fontSize:12, cursor:"pointer" }}>
+                Clear Results
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── CustomWorkoutBuilder ───────────────────────────────────────────────────────
+const EXERCISE_LIST = [
+  "Push-ups","Pull-ups","Squats","Lunges","Plank","Burpees","Jumping Jacks","Mountain Climbers",
+  "Dumbbell Curls","Shoulder Press","Deadlift","Bench Press","Lat Pulldown","Leg Press","Calf Raises",
+  "Tricep Dips","Bicycle Crunches","Russian Twist","Glute Bridge","Hip Thrust","Box Jumps",
+  "Rowing","Cycling","Jump Rope","Swimming","Running","Walking","Yoga","Stretching",
+];
+
+function CustomWorkoutBuilder({ userId, COLORS, FONTS, S }) {
+  const KEY = `sf_workouts_${userId}`;
+  const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || "[]"); } catch { return []; } };
+  const [workouts, setWorkouts] = useState(load);
+  const [open, setOpen]         = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [name, setName]         = useState("");
+  const [exercises, setExercises] = useState([{ exercise:"Push-ups", sets:"3", reps:"10", rest:"60" }]);
+  const [activeLog, setActiveLog] = useState(null); // workout id being logged
+
+  const save = () => {
+    if (!name.trim()) return;
+    const w = { id: Date.now(), name: name.trim(), exercises, createdAt: new Date().toISOString().slice(0,10) };
+    const next = [w, ...workouts];
+    setWorkouts(next);
+    try { localStorage.setItem(KEY, JSON.stringify(next)); } catch {}
+    setName(""); setExercises([{ exercise:"Push-ups", sets:"3", reps:"10", rest:"60" }]); setCreating(false);
+  };
+
+  const deleteWorkout = (id) => {
+    const next = workouts.filter(w => w.id !== id);
+    setWorkouts(next);
+    try { localStorage.setItem(KEY, JSON.stringify(next)); } catch {}
+  };
+
+  const addExercise = () => setExercises(ex => [...ex, { exercise:"Squats", sets:"3", reps:"12", rest:"60" }]);
+  const removeExercise = (i) => setExercises(ex => ex.filter((_,idx) => idx !== i));
+  const updateExercise = (i, field, val) => setExercises(ex => ex.map((e,idx) => idx===i ? {...e,[field]:val} : e));
+
+  return (
+    <div style={{ ...S.metricCard, marginBottom:14, border:`1px solid ${COLORS.purple}33` }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer" }} onClick={() => setOpen(o=>!o)}>
+        <div>
+          <div style={{ fontFamily:FONTS?.head, fontSize:13, fontWeight:700, color:COLORS.purple }}>🏋️ Custom Workout Builder</div>
+          <div style={{ fontSize:11, color:COLORS.muted, marginTop:2 }}>{workouts.length} saved workout{workouts.length !== 1 ? "s" : ""}</div>
+        </div>
+        <span style={{ fontSize:16, color:COLORS.muted, transform:open?"rotate(180deg)":"none", transition:"transform 0.2s" }}>▾</span>
+      </div>
+
+      {open && (
+        <div style={{ marginTop:14 }}>
+          {/* Saved workouts */}
+          {workouts.map(w => (
+            <div key={w.id} style={{ padding:"12px 14px", borderRadius:10, border:`1px solid ${COLORS.purple}33`,
+              background:`${COLORS.purple}08`, marginBottom:8 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+                <div style={{ fontWeight:700, fontSize:14, color:COLORS.purple }}>{w.name}</div>
+                <div style={{ display:"flex", gap:6 }}>
+                  <button onClick={() => setActiveLog(activeLog === w.id ? null : w.id)}
+                    style={{ fontSize:11, padding:"4px 10px", borderRadius:6, border:`1px solid ${COLORS.accent}44`,
+                      background:`${COLORS.accent}15`, color:COLORS.accent, cursor:"pointer", fontWeight:600 }}>
+                    {activeLog === w.id ? "Hide" : "▶ Start"}
+                  </button>
+                  <button onClick={() => deleteWorkout(w.id)}
+                    style={{ background:"transparent", border:"none", color:COLORS.muted, fontSize:16, cursor:"pointer" }}>✕</button>
+                </div>
+              </div>
+              <div style={{ fontSize:11, color:COLORS.muted }}>
+                {w.exercises.map(e => `${e.exercise} ${e.sets}×${e.reps}`).join(" · ")}
+              </div>
+              {activeLog === w.id && (
+                <div style={{ marginTop:10, borderTop:`1px solid ${COLORS.border}`, paddingTop:10 }}>
+                  {w.exercises.map((e, i) => (
+                    <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
+                      padding:"8px 10px", borderRadius:8, background:`${COLORS.card3}`, marginBottom:6 }}>
+                      <div>
+                        <div style={{ fontSize:13, fontWeight:600, color:COLORS.text }}>{e.exercise}</div>
+                        <div style={{ fontSize:11, color:COLORS.muted }}>{e.sets} sets × {e.reps} reps · {e.rest}s rest</div>
+                      </div>
+                    </div>
+                  ))}
+                  <div style={{ fontSize:12, color:COLORS.success, textAlign:"center", marginTop:8 }}>
+                    Total exercises: {w.exercises.length} · Est. time: ~{Math.round(w.exercises.reduce((t,e) => t + parseInt(e.sets||3)*(parseInt(e.rest||60)+30), 0) / 60)} min
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+
+          {/* Create new */}
+          {!creating ? (
+            <button onClick={() => setCreating(true)}
+              style={{ width:"100%", padding:"10px", borderRadius:10, border:`1.5px dashed ${COLORS.purple}66`,
+                background:`${COLORS.purple}10`, color:COLORS.purple, fontWeight:700, fontSize:13, cursor:"pointer" }}>
+              + Create New Workout
+            </button>
+          ) : (
+            <div style={{ border:`1px solid ${COLORS.purple}44`, borderRadius:10, padding:"14px" }}>
+              <input value={name} onChange={e=>setName(e.target.value)} placeholder="Workout name (e.g. Monday Push Day)"
+                style={{ ...S.input, marginBottom:12, fontSize:14 }} />
+
+              {exercises.map((ex, i) => (
+                <div key={i} style={{ display:"grid", gridTemplateColumns:"1fr auto auto auto auto", gap:6, marginBottom:8, alignItems:"center" }}>
+                  <select value={ex.exercise} onChange={e=>updateExercise(i,"exercise",e.target.value)}
+                    style={{ ...S.select, fontSize:12 }}>
+                    {EXERCISE_LIST.map(e => <option key={e} value={e}>{e}</option>)}
+                  </select>
+                  <input value={ex.sets} onChange={e=>updateExercise(i,"sets",e.target.value)}
+                    placeholder="Sets" style={{ ...S.input, width:46, fontSize:12, padding:"7px 6px", textAlign:"center" }} />
+                  <input value={ex.reps} onChange={e=>updateExercise(i,"reps",e.target.value)}
+                    placeholder="Reps" style={{ ...S.input, width:46, fontSize:12, padding:"7px 6px", textAlign:"center" }} />
+                  <input value={ex.rest} onChange={e=>updateExercise(i,"rest",e.target.value)}
+                    placeholder="Rest(s)" style={{ ...S.input, width:54, fontSize:12, padding:"7px 6px", textAlign:"center" }} />
+                  <button onClick={() => removeExercise(i)}
+                    style={{ background:"transparent", border:"none", color:COLORS.muted, fontSize:16, cursor:"pointer" }}>✕</button>
+                </div>
+              ))}
+
+              <div style={{ display:"flex", gap:8, marginTop:8 }}>
+                <button onClick={addExercise}
+                  style={{ flex:1, padding:"8px", borderRadius:8, border:`1px solid ${COLORS.purple}44`,
+                    background:`${COLORS.purple}15`, color:COLORS.purple, fontWeight:600, fontSize:12, cursor:"pointer" }}>
+                  + Add Exercise
+                </button>
+                <button onClick={save}
+                  style={{ flex:1, padding:"8px", borderRadius:8, background:COLORS.purple,
+                    border:"none", color:"#fff", fontWeight:700, fontSize:12, cursor:"pointer" }}>
+                  Save Workout
+                </button>
+                <button onClick={() => setCreating(false)}
+                  style={{ padding:"8px 12px", borderRadius:8, border:`1px solid ${COLORS.border}`,
+                    background:"transparent", color:COLORS.muted, fontSize:12, cursor:"pointer" }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── RestDayPlanner ─────────────────────────────────────────────────────────────
+function RestDayPlanner({ calorieBurns, profile, COLORS, FONTS, S }) {
+  const [open, setOpen] = useState(false);
+
+  // Determine if today should be a rest day based on recent burn logs
+  const last7 = calorieBurns.slice(0, 7);
+  const activeDaysLast7 = last7.filter(b => b.calories > 100).length;
+  const today = new Date().getDay(); // 0=Sun
+  const dayName = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][today];
+
+  const isRestDay = activeDaysLast7 >= 4; // rest recommended if worked out 4+ days in last 7
+
+  const RECOVERY_ACTIVITIES = [
+    { emoji:"🧘", title:"Yoga / Stretching", duration:"20–30 min", benefit:"Improves flexibility, reduces soreness", cal:80 },
+    { emoji:"🚶", title:"Light Walk", duration:"20 min", benefit:"Boosts blood flow without taxing muscles", cal:60 },
+    { emoji:"🛁", title:"Warm Epsom Salt Bath", duration:"15 min", benefit:"Reduces muscle inflammation and soreness", cal:0 },
+    { emoji:"💤", title:"Sleep 8+ hours", duration:"Tonight", benefit:"Muscle repair and growth happens during sleep", cal:0 },
+    { emoji:"🥗", title:"High Protein Meal", duration:"Today", benefit:"Feeds muscle recovery and reduces breakdown", cal:0 },
+    { emoji:"💧", title:"Hydration Focus", duration:"All day", benefit:"Flush lactic acid, restore electrolytes", cal:0 },
+    { emoji:"🧊", title:"Cold Shower / Ice Pack", duration:"5–10 min", benefit:"Reduce inflammation, speed up recovery", cal:0 },
+    { emoji:"📚", title:"Plan Next Week's Workouts", duration:"10 min", benefit:"Stay consistent with a clear plan", cal:0 },
+  ];
+
+  const fitnessLevel = profile?.fitnessLevel || "Moderate";
+  const restFreq = fitnessLevel === "Active" ? "1–2 days/week" : fitnessLevel === "Moderate" ? "2 days/week" : "3 days/week";
+
+  return (
+    <div style={{ ...S.metricCard, marginBottom:14, border:`1px solid ${isRestDay?COLORS.success:COLORS.border}33` }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer" }} onClick={() => setOpen(o=>!o)}>
+        <div>
+          <div style={{ fontFamily:FONTS?.head, fontSize:13, fontWeight:700, color:isRestDay?COLORS.success:COLORS.accent2 }}>
+            {isRestDay ? "🛋️ Rest Day Planner" : "⚡ Recovery Tracker"}
+          </div>
+          <div style={{ fontSize:11, color:COLORS.muted, marginTop:2 }}>
+            {isRestDay
+              ? `${dayName} — rest recommended (${activeDaysLast7} active days this week)`
+              : `${activeDaysLast7}/7 active days this week · ${restFreq} rest recommended`}
+          </div>
+        </div>
+        <span style={{ fontSize:16, color:COLORS.muted, transform:open?"rotate(180deg)":"none", transition:"transform 0.2s" }}>▾</span>
+      </div>
+
+      {open && (
+        <div style={{ marginTop:14 }}>
+          {isRestDay ? (
+            <>
+              <div style={{ padding:"10px 14px", borderRadius:10, background:`${COLORS.success}10`, border:`1px solid ${COLORS.success}33`, marginBottom:12, fontSize:13, color:COLORS.text, lineHeight:1.7 }}>
+                ✅ You've worked out <b style={{ color:COLORS.success }}>{activeDaysLast7} days</b> this week. Today is a perfect rest day. Active recovery helps muscles rebuild stronger.
+              </div>
+              <div style={{ fontWeight:700, fontSize:12, color:COLORS.muted, marginBottom:8 }}>REST DAY ACTIVITIES</div>
+              <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                {RECOVERY_ACTIVITIES.map((a, i) => (
+                  <div key={i} style={{ display:"flex", gap:12, alignItems:"center", padding:"10px 12px",
+                    borderRadius:10, background:COLORS.card3, border:`1px solid ${COLORS.border}` }}>
+                    <span style={{ fontSize:22, flexShrink:0 }}>{a.emoji}</span>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:13, fontWeight:600, color:COLORS.text }}>{a.title}</div>
+                      <div style={{ fontSize:11, color:COLORS.muted }}>{a.duration} · {a.benefit}</div>
+                    </div>
+                    {a.cal > 0 && <div style={{ fontSize:11, color:COLORS.accent3, fontWeight:700, flexShrink:0 }}>~{a.cal} kcal</div>}
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div>
+              <div style={{ padding:"10px 14px", borderRadius:10, background:`${COLORS.accent2}10`, border:`1px solid ${COLORS.accent2}33`, marginBottom:12, fontSize:13, color:COLORS.text, lineHeight:1.7 }}>
+                💪 You've been active <b style={{ color:COLORS.accent2 }}>{activeDaysLast7} days</b> this week. For a {fitnessLevel.toLowerCase()} fitness level, plan a rest day every <b>{restFreq}</b> to allow full muscle recovery.
+              </div>
+              <div style={{ fontWeight:700, fontSize:12, color:COLORS.muted, marginBottom:8 }}>REST DAY TIPS</div>
+              {[
+                "Sleep 7–9 hours to let muscles repair and grow",
+                "Eat sufficient protein (1.6–2g per kg body weight)",
+                "Light stretching or yoga is fine — keep intensity low",
+                "Avoid back-to-back days training the same muscle group",
+                "Soreness 24–48 hours after workout is normal (DOMS)",
+              ].map((tip, i) => (
+                <div key={i} style={{ fontSize:13, color:COLORS.text, padding:"7px 10px", borderRadius:8,
+                  background:COLORS.card3, marginBottom:6, borderLeft:`3px solid ${COLORS.accent2}` }}>
+                  {tip}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── StepsCalorieBurn ───────────────────────────────────────────────────────────
+function StepsCalorieBurn({ profile, userId, onBurnSaved, COLORS, FONTS, S }) {
+  const [steps, setSteps]     = useState("");
+  const [open, setOpen]       = useState(false);
+  const [saving, setSaving]   = useState(false);
+  const [saved, setSaved]     = useState(false);
+
+  const weight = parseFloat(profile?.weight) || 70;
+  // MET value for walking ~3.5km/h = 3.5, stride ≈ 0.762m
+  const calPerStep = (weight * 0.0005); // ~0.035 kcal per step per kg / 70 = 0.035 * 70 / 1000
+  const estimatedCal = steps ? Math.round(parseInt(steps) * weight * 0.00035) : 0;
+
+  // Steps to distance: avg stride ~0.75m
+  const distKm = steps ? (parseInt(steps) * 0.75 / 1000).toFixed(2) : 0;
+
+  const logBurn = async () => {
+    if (!steps || estimatedCal <= 0 || saving) return;
+    setSaving(true);
+    try {
+      await addDoc(collection(db, "calorie_burns"), {
+        user_id: userId,
+        activity: `Walking (${parseInt(steps).toLocaleString()} steps)`,
+        calories: estimatedCal,
+        duration: Math.round(parseInt(steps) / 100), // ~100 steps/min
+        date: new Date().toISOString().slice(0,10),
+        created_at: serverTimestamp(),
+      });
+      onBurnSaved?.();
+      setSaved(true);
+      setSteps("");
+      setTimeout(() => setSaved(false), 3000);
+    } catch {}
+    setSaving(false);
+  };
+
+  const STEP_GOALS = [
+    { steps:5000, label:"Light", emoji:"🚶", color:COLORS.accent3 },
+    { steps:8000, label:"Moderate", emoji:"🚶‍♂️", color:COLORS.accent2 },
+    { steps:10000, label:"Active", emoji:"🏃", color:COLORS.success },
+    { steps:15000, label:"Athlete", emoji:"🏃‍♂️", color:COLORS.purple },
+  ];
+
+  return (
+    <div style={{ ...S.metricCard, marginBottom:14, border:`1px solid ${COLORS.accent3}33` }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer" }} onClick={() => setOpen(o=>!o)}>
+        <div>
+          <div style={{ fontFamily:FONTS?.head, fontSize:13, fontWeight:700, color:COLORS.accent3 }}>👟 Steps → Calorie Burn</div>
+          <div style={{ fontSize:11, color:COLORS.muted, marginTop:2 }}>Enter your steps to calculate & log calories burned</div>
+        </div>
+        <span style={{ fontSize:16, color:COLORS.muted, transform:open?"rotate(180deg)":"none", transition:"transform 0.2s" }}>▾</span>
+      </div>
+
+      {open && (
+        <div style={{ marginTop:14 }}>
+          {/* Step goal reference */}
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:6, marginBottom:14 }}>
+            {STEP_GOALS.map(g => (
+              <button key={g.steps} onClick={() => setSteps(String(g.steps))}
+                style={{ padding:"8px 4px", borderRadius:8, border:`1px solid ${g.color}44`,
+                  background: steps === String(g.steps) ? `${g.color}22` : "transparent",
+                  cursor:"pointer", textAlign:"center" }}>
+                <div style={{ fontSize:16 }}>{g.emoji}</div>
+                <div style={{ fontSize:11, fontWeight:700, color:g.color }}>{(g.steps/1000).toFixed(0)}k</div>
+                <div style={{ fontSize:10, color:COLORS.muted }}>{g.label}</div>
+              </button>
+            ))}
+          </div>
+
+          {/* Step input */}
+          <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:12 }}>
+            <input type="number" value={steps} onChange={e=>setSteps(e.target.value)}
+              placeholder="Enter steps (e.g. 8000)"
+              style={{ ...S.input, flex:1, fontSize:15, fontWeight:700, textAlign:"center" }} />
+          </div>
+
+          {/* Live calculation */}
+          {steps && parseInt(steps) > 0 && (
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:12 }}>
+              {[
+                { label:"Steps", value: parseInt(steps).toLocaleString(), color:COLORS.accent },
+                { label:"Distance", value: `${distKm} km`, color:COLORS.accent2 },
+                { label:"Burned", value: `${estimatedCal} kcal`, color:COLORS.success },
+              ].map(item => (
+                <div key={item.label} style={{ textAlign:"center", padding:"10px 8px", borderRadius:10, background:COLORS.card3, border:`1px solid ${item.color}33` }}>
+                  <div style={{ fontSize:16, fontWeight:700, color:item.color }}>{item.value}</div>
+                  <div style={{ fontSize:10, color:COLORS.muted, marginTop:2 }}>{item.label}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ fontSize:11, color:COLORS.muted, marginBottom:10 }}>
+            Calculated for <b style={{ color:COLORS.text }}>{weight}kg</b> body weight · Formula: steps × weight × 0.00035
+          </div>
+
+          {saved ? (
+            <div style={{ textAlign:"center", padding:"10px", borderRadius:8, background:`${COLORS.success}15`, color:COLORS.success, fontWeight:700, fontSize:13 }}>
+              ✅ Calorie burn logged!
+            </div>
+          ) : (
+            <button onClick={logBurn} disabled={!steps || estimatedCal <= 0 || saving}
+              style={{ width:"100%", padding:"11px", borderRadius:10, background: (!steps||estimatedCal<=0) ? `${COLORS.accent3}44` : COLORS.accent3,
+                border:"none", color:"#fff", fontWeight:700, fontSize:13, cursor: (!steps||estimatedCal<=0) ? "not-allowed" : "pointer" }}>
+              {saving ? "Logging..." : `Log ${estimatedCal} kcal Burned`}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── HabitTracker ──────────────────────────────────────────────────────────────
 const HABITS = [
   { id:"water",   label:"Drink 8 glasses of water", emoji:"💧" },
@@ -10451,7 +11014,11 @@ function App() {
               {/* Habit Tracker */}
               <HabitTracker COLORS={COLORS} FONTS={FONTS} S={S} />
 
+              {/* Steps → Calorie Burn */}
+              <StepsCalorieBurn profile={profile} userId={currentUser.id} onBurnSaved={() => loadCalorieBurns(currentUser.id)} COLORS={COLORS} FONTS={FONTS} S={S} />
 
+              {/* Rest Day Planner */}
+              <RestDayPlanner calorieBurns={calorieBurns} profile={profile} COLORS={COLORS} FONTS={FONTS} S={S} />
 
               {/* Daily Wellness Tips */}
               {(() => {
@@ -10636,6 +11203,12 @@ function App() {
                     />
                   </div>
                 </div>
+
+                {/* Progress Photos */}
+                <ProgressPhotos userId={currentUser.id} COLORS={COLORS} FONTS={FONTS} S={S} />
+
+                {/* Blood Report Analysis */}
+                <BloodReportAnalysis COLORS={COLORS} FONTS={FONTS} S={S} />
 
                 {/* Share with friend inside app */}
                 <div style={{ ...S.metricCard, marginBottom:14, background:`${COLORS.accent2}08`, border:`1px solid ${COLORS.accent2}33` }}>
@@ -10832,6 +11405,8 @@ function App() {
           {/* WORKOUT */}
           {dashTab === "workout" && (
             <div key="tab-workout" className="sf-tab-panel">
+              {/* Custom Workout Builder */}
+              <CustomWorkoutBuilder userId={currentUser.id} COLORS={COLORS} FONTS={FONTS} S={S} />
               <div style={{ fontFamily: FONTS.head, fontSize: 18, fontWeight: 700, marginBottom: "0.5rem" }}>Your Workout Plan</div>
               <div style={{ fontSize: 13, color: COLORS.muted, marginBottom: "1rem" }}>
                 {workout.type === "Gym" ? "Weight training split — no cardio" : workout.type === "Home" ? "Bodyweight training split — no equipment needed" : "Outdoor training plan"} · {workout.freq}
