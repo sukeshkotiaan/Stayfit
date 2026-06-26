@@ -4,6 +4,106 @@ import {
   collection, doc, getDoc, getDocs, addDoc, setDoc, updateDoc, deleteDoc,
   query, where, orderBy, limit, serverTimestamp, Timestamp, onSnapshot
 } from "firebase/firestore";
+
+// ── AI Keys & Providers ────────────────────────────────────────────────────────
+const AI_KEYS = {
+  gemini: [
+    "AIzaSyBoVY6Bsd4OcDkgH7oNh11BSorCJ9tvdZc",
+    "AIzaSyAQnuAAfNB2ryG9MY8viPiCu1KJc2Vy9uY",
+  ],
+  groq: [
+    "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",
+  ],
+  openrouter: [
+    "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",
+  ],
+};
+
+async function _callGemini(prompt, maxTokens, keys, imageBase64 = null) {
+  const startIdx = (() => { try { return parseInt(localStorage.getItem("gm_idx") || "0") % keys.length; } catch { return 0; } })();
+  for (let i = 0; i < keys.length; i++) {
+    const idx = (startIdx + i) % keys.length;
+    const key = keys[idx];
+    if (!key) continue;
+    const parts = imageBase64
+      ? [{ inlineData: { mimeType: "image/jpeg", data: imageBase64 } }, { text: prompt }]
+      : [{ text: prompt }];
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
+      { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents: [{ role: "user", parts }], generationConfig: { temperature: 0.4, maxOutputTokens: maxTokens } }) }
+    );
+    if (res.status === 429) { continue; }
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    if (!text) throw new Error("Empty Gemini response");
+    try { localStorage.setItem("gm_idx", String((idx + 1) % keys.length)); } catch {}
+    return text;
+  }
+  throw Object.assign(new Error("RATE_LIMITED"), { provider: "gemini" });
+}
+
+async function _callGroq(prompt, maxTokens, keys) {
+  const startIdx = (() => { try { return parseInt(localStorage.getItem("gq_idx") || "0") % keys.length; } catch { return 0; } })();
+  for (let i = 0; i < keys.length; i++) {
+    const idx = (startIdx + i) % keys.length;
+    const key = keys[idx];
+    if (!key || key.trim() === "") continue;
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+      body: JSON.stringify({ model: "llama-3.3-70b-versatile", messages: [{ role: "user", content: prompt }], max_tokens: Math.min(maxTokens, 32768), temperature: 0.4 }),
+    });
+    if (res.status === 429) { continue; }
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    const text = data.choices?.[0]?.message?.content || "";
+    if (!text) throw new Error("Empty Groq response");
+    try { localStorage.setItem("gq_idx", String((idx + 1) % keys.length)); } catch {}
+    return text;
+  }
+  throw Object.assign(new Error("RATE_LIMITED"), { provider: "groq" });
+}
+
+async function _callOpenRouter(prompt, maxTokens, keys) {
+  for (const key of keys) {
+    if (!key || key.trim() === "") continue;
+    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}`, "HTTP-Referer": window.location.origin, "X-Title": "StayFit" },
+      body: JSON.stringify({ model: "meta-llama/llama-3.3-70b-instruct:free", messages: [{ role: "user", content: prompt }], max_tokens: Math.min(maxTokens, 8192), temperature: 0.4 }),
+    });
+    if (res.status === 429) { continue; }
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    const text = data.choices?.[0]?.message?.content || "";
+    if (!text) throw new Error("Empty OpenRouter response");
+    return text;
+  }
+  throw Object.assign(new Error("RATE_LIMITED"), { provider: "openrouter" });
+}
+
+async function callAI(prompt, maxTokens = 8000, imageBase64 = null) {
+  const providers = [
+    { name: "Gemini", fn: () => _callGemini(prompt, maxTokens, AI_KEYS.gemini, imageBase64) },
+    { name: "Groq", fn: () => _callGroq(prompt, maxTokens, AI_KEYS.groq) },
+    { name: "OpenRouter", fn: () => _callOpenRouter(prompt, maxTokens, AI_KEYS.openrouter) },
+  ];
+  let lastErr = null;
+  for (const { name, fn } of providers) {
+    try {
+      const rawText = await fn();
+      const text = rawText.replace(/^```json\s*/m, "").replace(/^```\s*/m, "").replace(/```\s*$/m, "").trim();
+      return { text, provider: name };
+    } catch (e) {
+      if (e.message === "RATE_LIMITED") { lastErr = e; continue; }
+      throw e;
+    }
+  }
+  throw new Error("ALL_RATE_LIMITED");
+}
+
 // ── Theme (inlined — no separate theme.js needed) ─────────────────────────────
 const THEME_STORAGE_KEY = "stayfit_theme_v1";
 
@@ -7271,7 +7371,9 @@ function MealFoodEntry({ mealType, userId, loggedDate, onSaved, COLORS, FONTS, S
   const [cal, setCal]             = useState("");
   const [saving, setSaving]       = useState(false);
   const [scanning, setScanning]   = useState(false);
+  const [photoLogging, setPhotoLogging] = useState(false);
   const videoRef = useRef(null);
+  const photoInputRef = useRef(null);
 
   // Time state — hour, minute, period (AM/PM)
   const nowH = new Date().getHours();
@@ -7401,8 +7503,47 @@ function MealFoodEntry({ mealType, userId, loggedDate, onSaved, COLORS, FONTS, S
 
       {/* ── STEP 2: Search food ── */}
       <div style={{ marginBottom: food ? 12 : 0, position:"relative" }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6, flexWrap:"wrap", gap:6 }}>
           <div style={{ fontSize:11, fontWeight:700, color:COLORS.muted }}>🔍 SEARCH FOOD</div>
+          <div style={{ display:"flex", gap:6 }}>
+            {/* Photo Food Logging */}
+            <button onClick={() => photoInputRef.current?.click()}
+              disabled={photoLogging}
+              style={{ fontSize:11, color:COLORS.purple, background:`${COLORS.purple}15`, border:`1px solid ${COLORS.purple}44`,
+                borderRadius:6, padding:"4px 10px", cursor:"pointer", fontWeight:600, opacity: photoLogging ? 0.6 : 1 }}>
+              {photoLogging ? "🤖 Analyzing..." : "📸 Photo Log"}
+            </button>
+            <input ref={photoInputRef} type="file" accept="image/*" capture="environment" style={{ display:"none" }}
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                setPhotoLogging(true);
+                try {
+                  const reader = new FileReader();
+                  reader.onload = async (ev) => {
+                    const base64 = ev.target.result.split(",")[1];
+                    const prompt = `Look at this food photo and identify the food item(s). Estimate the calories. Return ONLY valid JSON: {"food_name": "...", "calories": <number>, "quantity": "1 serving", "confidence": "high|medium|low"}. If multiple foods, pick the main one. Food name should be a common name like "Dal Rice", "Chicken Curry", "Apple".`;
+                    try {
+                      const { text } = await callAI(prompt, 300, base64);
+                      const parsed = JSON.parse(text.trim().replace(/```json|```/g,"").trim());
+                      if (parsed.food_name) {
+                        setSearch(parsed.food_name);
+                        setFood(parsed.food_name);
+                        setCal(String(parsed.calories || ""));
+                        setQtyOption(parsed.quantity || "1 serving");
+                      }
+                    } catch (err) {
+                      alert("Could not identify food from photo. Please type the food name manually.");
+                    }
+                    setPhotoLogging(false);
+                  };
+                  reader.readAsDataURL(file);
+                } catch {
+                  setPhotoLogging(false);
+                }
+                e.target.value = "";
+              }}
+            />
           <button onClick={async () => {
             if (!("BarcodeDetector" in window)) {
               const code = prompt("Enter barcode number:");
@@ -7443,6 +7584,7 @@ function MealFoodEntry({ mealType, userId, loggedDate, onSaved, COLORS, FONTS, S
             borderRadius:6, padding:"4px 10px", cursor:"pointer", fontWeight:600 }}>
             📷 Scan Barcode
           </button>
+          </div>
         </div>
         {scanning && (
           <div style={{ position:"relative", marginBottom:8, borderRadius:10, overflow:"hidden", background:"#000" }}>
@@ -7900,6 +8042,115 @@ function RestTimer({ S, COLORS, FONTS, userId, onCalorieSaved }) {
 
 // ── MealFoodEntry ─────────────────────────────────────────────────────────────
 // Layout order: [Time AM/PM] → [Search food] → [Qty pills] → [Calories] → [Add]
+
+// ── HabitTracker ──────────────────────────────────────────────────────────────
+const HABITS = [
+  { id:"water",   label:"Drink 8 glasses of water", emoji:"💧" },
+  { id:"sleep",   label:"Sleep 7–8 hours",           emoji:"😴" },
+  { id:"workout", label:"Workout / walk 30 min",     emoji:"🏃" },
+  { id:"nojunk",  label:"No junk food today",        emoji:"🚫" },
+  { id:"steps",   label:"10,000 steps",              emoji:"👟" },
+  { id:"fruits",  label:"Eat fruits / veggies",      emoji:"🥦" },
+  { id:"meditate",label:"Meditate / mindfulness",    emoji:"🧘" },
+  { id:"weightlog",label:"Log weight / food",        emoji:"📋" },
+];
+
+function HabitTracker({ COLORS, FONTS, S }) {
+  const today = new Date().toISOString().slice(0,10);
+  const STORAGE_KEY = "sf_habits_v2";
+
+  const loadData = () => {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"); } catch { return {}; }
+  };
+
+  const [data, setData]     = useState(loadData);
+  const [open, setOpen]     = useState(false);
+
+  const todayChecked = data[today] || {};
+
+  const toggle = (id) => {
+    const next = { ...data, [today]: { ...todayChecked, [id]: !todayChecked[id] } };
+    setData(next);
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch {}
+  };
+
+  const getStreak = (id) => {
+    let streak = 0;
+    const d = new Date(today);
+    while (true) {
+      const key = d.toISOString().slice(0,10);
+      if (data[key]?.[id]) { streak++; d.setDate(d.getDate()-1); } else break;
+    }
+    return streak;
+  };
+
+  const completedToday = HABITS.filter(h => todayChecked[h.id]).length;
+  const pct = Math.round((completedToday / HABITS.length) * 100);
+
+  return (
+    <div style={{ ...S.metricCard, marginBottom:10, border:`1px solid ${COLORS.accent2}33` }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer" }} onClick={() => setOpen(o=>!o)}>
+        <div>
+          <div style={{ fontFamily:FONTS?.head, fontSize:13, fontWeight:700, color:COLORS.accent2 }}>🎯 Daily Habits</div>
+          <div style={{ fontSize:11, color:COLORS.muted, marginTop:2 }}>{completedToday}/{HABITS.length} done today · {pct}%</div>
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+          {/* Progress ring */}
+          <svg width={44} height={44} style={{ transform:"rotate(-90deg)" }}>
+            <circle cx={22} cy={22} r={17} fill="none" stroke={`${COLORS.accent2}22`} strokeWidth={4} />
+            <circle cx={22} cy={22} r={17} fill="none" stroke={COLORS.accent2} strokeWidth={4}
+              strokeDasharray={`${2*Math.PI*17}`} strokeDashoffset={`${2*Math.PI*17*(1-pct/100)}`}
+              strokeLinecap="round" style={{ transition:"stroke-dashoffset 0.4s" }} />
+          </svg>
+          <span style={{ fontSize:16, color:COLORS.muted, transform:open?"rotate(180deg)":"none", transition:"transform 0.2s" }}>▾</span>
+        </div>
+      </div>
+
+      {open && (
+        <div style={{ marginTop:14 }}>
+          {/* Progress bar */}
+          <div style={{ height:4, borderRadius:4, background:`${COLORS.accent2}22`, marginBottom:14, overflow:"hidden" }}>
+            <div style={{ height:"100%", width:`${pct}%`, background:COLORS.accent2, borderRadius:4, transition:"width 0.4s" }} />
+          </div>
+          {HABITS.map(h => {
+            const checked = !!todayChecked[h.id];
+            const streak = getStreak(h.id);
+            return (
+              <div key={h.id} onClick={() => toggle(h.id)}
+                style={{ display:"flex", alignItems:"center", gap:12, padding:"11px 12px",
+                  borderRadius:10, marginBottom:6, cursor:"pointer",
+                  background: checked ? `${COLORS.accent2}12` : `${COLORS.card3}`,
+                  border: `1px solid ${checked ? COLORS.accent2+"44" : COLORS.border}`,
+                  transition:"all 0.2s" }}>
+                <div style={{ width:24, height:24, borderRadius:"50%", border:`2px solid ${checked ? COLORS.accent2 : COLORS.muted}`,
+                  background: checked ? COLORS.accent2 : "transparent", display:"flex", alignItems:"center", justifyContent:"center",
+                  flexShrink:0, transition:"all 0.2s" }}>
+                  {checked && <span style={{ fontSize:13, color:"#fff" }}>✓</span>}
+                </div>
+                <span style={{ fontSize:18, flexShrink:0 }}>{h.emoji}</span>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:13, fontWeight:600, color: checked ? COLORS.accent2 : COLORS.text,
+                    textDecoration: checked ? "line-through" : "none", opacity: checked ? 0.8 : 1 }}>
+                    {h.label}
+                  </div>
+                  {streak > 0 && (
+                    <div style={{ fontSize:11, color:COLORS.gold, marginTop:1 }}>🔥 {streak} day streak</div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+          {completedToday === HABITS.length && (
+            <div style={{ textAlign:"center", padding:"12px", marginTop:4, borderRadius:10,
+              background:`${COLORS.success}15`, border:`1px solid ${COLORS.success}33`, color:COLORS.success, fontWeight:700, fontSize:14 }}>
+              🎉 All habits complete! Amazing day!
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── RecipeBuilder ─────────────────────────────────────────────────────────────
 function RecipeBuilder({ onPickRecipe, COLORS, FONTS, S }) {
@@ -10196,6 +10447,9 @@ function App() {
 
               {/* Interactive Water Tracker */}
               <WaterTracker dailyWater={dailyWater} userId={currentUser.id} waterTimes={smartTimes.waterTimes} S={S} COLORS={COLORS} FONTS={FONTS} />
+
+              {/* Habit Tracker */}
+              <HabitTracker COLORS={COLORS} FONTS={FONTS} S={S} />
 
 
 
