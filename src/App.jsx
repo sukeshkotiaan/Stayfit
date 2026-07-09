@@ -5,103 +5,19 @@ import {
   query, where, orderBy, limit, serverTimestamp, Timestamp, onSnapshot
 } from "firebase/firestore";
 
-// ── AI Keys & Providers ────────────────────────────────────────────────────────
-const AI_KEYS = {
-  gemini: [
-    "AIzaSyBoVY6Bsd4OcDkgH7oNh11BSorCJ9tvdZc",
-    "AIzaSyAQnuAAfNB2ryG9MY8viPiCu1KJc2Vy9uY",
-  ],
-  groq: [
-    "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",
-  ],
-  openrouter: [
-    "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",
-  ],
-};
-
-async function _callGemini(prompt, maxTokens, keys, imageBase64 = null) {
-  const startIdx = (() => { try { return parseInt(localStorage.getItem("gm_idx") || "0") % keys.length; } catch { return 0; } })();
-  for (let i = 0; i < keys.length; i++) {
-    const idx = (startIdx + i) % keys.length;
-    const key = keys[idx];
-    if (!key) continue;
-    const parts = imageBase64
-      ? [{ inlineData: { mimeType: "image/jpeg", data: imageBase64 } }, { text: prompt }]
-      : [{ text: prompt }];
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
-      { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contents: [{ role: "user", parts }], generationConfig: { temperature: 0.4, maxOutputTokens: maxTokens } }) }
-    );
-    if (res.status === 429) { continue; }
-    if (!res.ok) throw new Error(await res.text());
-    const data = await res.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    if (!text) throw new Error("Empty Gemini response");
-    try { localStorage.setItem("gm_idx", String((idx + 1) % keys.length)); } catch {}
-    return text;
-  }
-  throw Object.assign(new Error("RATE_LIMITED"), { provider: "gemini" });
-}
-
-async function _callGroq(prompt, maxTokens, keys) {
-  const startIdx = (() => { try { return parseInt(localStorage.getItem("gq_idx") || "0") % keys.length; } catch { return 0; } })();
-  for (let i = 0; i < keys.length; i++) {
-    const idx = (startIdx + i) % keys.length;
-    const key = keys[idx];
-    if (!key || key.trim() === "") continue;
-    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-      body: JSON.stringify({ model: "llama-3.3-70b-versatile", messages: [{ role: "user", content: prompt }], max_tokens: Math.min(maxTokens, 32768), temperature: 0.4 }),
-    });
-    if (res.status === 429) { continue; }
-    if (!res.ok) throw new Error(await res.text());
-    const data = await res.json();
-    const text = data.choices?.[0]?.message?.content || "";
-    if (!text) throw new Error("Empty Groq response");
-    try { localStorage.setItem("gq_idx", String((idx + 1) % keys.length)); } catch {}
-    return text;
-  }
-  throw Object.assign(new Error("RATE_LIMITED"), { provider: "groq" });
-}
-
-async function _callOpenRouter(prompt, maxTokens, keys) {
-  for (const key of keys) {
-    if (!key || key.trim() === "") continue;
-    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}`, "HTTP-Referer": window.location.origin, "X-Title": "StayFit" },
-      body: JSON.stringify({ model: "meta-llama/llama-3.3-70b-instruct:free", messages: [{ role: "user", content: prompt }], max_tokens: Math.min(maxTokens, 8192), temperature: 0.4 }),
-    });
-    if (res.status === 429) { continue; }
-    if (!res.ok) throw new Error(await res.text());
-    const data = await res.json();
-    const text = data.choices?.[0]?.message?.content || "";
-    if (!text) throw new Error("Empty OpenRouter response");
-    return text;
-  }
-  throw Object.assign(new Error("RATE_LIMITED"), { provider: "openrouter" });
-}
-
+// ── AI via secure serverless proxy ────────────────────────────────────────────
 async function callAI(prompt, maxTokens = 8000, imageBase64 = null) {
-  const providers = [
-    { name: "Gemini", fn: () => _callGemini(prompt, maxTokens, AI_KEYS.gemini, imageBase64) },
-    { name: "Groq", fn: () => _callGroq(prompt, maxTokens, AI_KEYS.groq) },
-    { name: "OpenRouter", fn: () => _callOpenRouter(prompt, maxTokens, AI_KEYS.openrouter) },
-  ];
-  let lastErr = null;
-  for (const { name, fn } of providers) {
-    try {
-      const rawText = await fn();
-      const text = rawText.replace(/^```json\s*/m, "").replace(/^```\s*/m, "").replace(/```\s*$/m, "").trim();
-      return { text, provider: name };
-    } catch (e) {
-      if (e.message === "RATE_LIMITED") { lastErr = e; continue; }
-      throw e;
-    }
+  const res = await fetch("/api/ai", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt, maxTokens, imageBase64 }),
+  });
+  if (res.status === 429) throw new Error("ALL_RATE_LIMITED");
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || "AI request failed");
   }
-  throw new Error("ALL_RATE_LIMITED");
+  return res.json();
 }
 
 // ── Theme (inlined — no separate theme.js needed) ─────────────────────────────
