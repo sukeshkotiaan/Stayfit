@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { db } from "./firebase";
 import {
   collection, doc, getDoc, getDocs, addDoc, setDoc, updateDoc, deleteDoc,
@@ -10280,8 +10281,16 @@ function App() {
 
   if (screen === "loading") return (
     <div style={{...S.app, alignItems:"center", justifyContent:"center"}}>
-      <img src={LOGO_SRC} alt="Track Today Live Better" style={{ height: 60, width: "auto", objectFit: "contain" }} />
-      <div style={{color:COLORS.muted, fontSize:13, marginTop:8}}>Loading...</div>
+      <motion.img
+        src={LOGO_SRC} alt="Track Today Live Better"
+        style={{ height: 60, width: "auto", objectFit: "contain" }}
+        animate={{ opacity: [0.4, 1, 0.4] }}
+        transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+      />
+      <motion.div
+        style={{color:COLORS.muted, fontSize:13, marginTop:8}}
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}
+      >Loading...</motion.div>
     </div>
   );
 
@@ -10295,7 +10304,12 @@ function App() {
         <GlobalStyles isDark={isDark} />
         <MeshBackground C={C} isDark={isDark} />
         <div style={{ ...S.center, zIndex: 1 }}>
-          <div style={{ ...S.card, maxWidth: 440 }} className="sf-fade-in">
+          <motion.div
+            style={{ ...S.card, maxWidth: 440 }}
+            initial={{ opacity: 0, y: 32, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.45, ease: "easeOut" }}
+          >
             <div style={{ textAlign: "center", marginBottom: "1.5rem" }}>
               <img src={LOGO_SRC} alt="Track Today Live Better" style={{ height: 70, width: "auto", objectFit: "contain", marginBottom: 8 }} />
               <div style={{ color: COLORS.muted, fontSize: 14, marginTop: 4 }}>Your AI-powered health & weight loss coach</div>
@@ -10359,7 +10373,7 @@ function App() {
                 After sign up, your admin will review and activate your account.
               </div>
             )}
-          </div>
+          </motion.div>
         </div>
       </div>
     );
@@ -11073,8 +11087,11 @@ function App() {
             </div>
           )}
           {/* TODAY */}
+          <AnimatePresence mode="wait">
           {dashTab === "today" && (
-            <div key="tab-today" className="sf-tab-panel">
+            <motion.div key="tab-today" className="sf-tab-panel"
+              initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.22, ease: "easeOut" }}>
               {/* Hero Dashboard — Today only */}
               {(() => {
                 const streak = calcStreak(userLogs);
@@ -11455,12 +11472,16 @@ function App() {
                   </div>
                 </div>
               )}
-            </div>
+            </motion.div>
           )}
+          </AnimatePresence>
 
+          <AnimatePresence mode="wait">
           {/* METRICS */}
           {dashTab === "metrics" && (
-            <div key="tab-metrics" className="sf-tab-panel">
+            <motion.div key="tab-metrics" className="sf-tab-panel"
+              initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.22, ease: "easeOut" }}>
               <div style={{ fontFamily: FONTS.head, fontSize: 18, fontWeight: 700, marginBottom: "1rem" }}>Your Body Metrics</div>
 
               {/* BMI Gauge featured */}
@@ -11543,9 +11564,11 @@ function App() {
                   ))}
                 </div>
               </div>
-            </div>
+            </motion.div>
           )}
+          </AnimatePresence>
 
+          <AnimatePresence mode="wait">
           {/* PROGRESS */}
           {dashTab === "progress" && (() => {
             const streak = calcStreak(userLogs);
@@ -11574,7 +11597,9 @@ function App() {
             const achieved = milestones.filter(m => totalLost >= m.kg);
             const next = milestones.find(m => totalLost < m.kg);
             return (
-              <div key="tab-progress" className="sf-tab-panel">
+              <motion.div key="tab-progress" className="sf-tab-panel"
+                initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.22, ease: "easeOut" }}>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"1rem", flexWrap:"wrap", gap:10 }}>
                   <div style={{ fontFamily: FONTS.head, fontSize: 18, fontWeight: 700 }}>Your Progress</div>
                   <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
@@ -11792,13 +11817,17 @@ function App() {
                     );
                   })}
                 </div>
-              </div>
+              </motion.div>
             );
           })()}
+          </AnimatePresence>
 
+          <AnimatePresence mode="wait">
           {/* WORKOUT */}
           {dashTab === "workout" && (
-            <div key="tab-workout" className="sf-tab-panel">
+            <motion.div key="tab-workout" className="sf-tab-panel"
+              initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.22, ease: "easeOut" }}>
               {/* Custom Workout Builder */}
               <CustomWorkoutBuilder userId={currentUser.id} COLORS={COLORS} FONTS={FONTS} S={S} />
               <div style={{ fontFamily: FONTS.head, fontSize: 18, fontWeight: 700, marginBottom: "0.5rem" }}>Your Workout Plan</div>
@@ -11862,9 +11891,11 @@ function App() {
                   {workout.type === "Outdoor" && <><br /><span style={{ color: COLORS.accent3 }}>🌿 Outdoor training: warm up with a 5-min walk. Cool down with stretches after each session.</span></>}
                 </div>
               </div>
-            </div>
+            </motion.div>
           )}
+          </AnimatePresence>
 
+          <AnimatePresence mode="wait">
           {/* MEALS */}
           {dashTab === "meals" && (
             <MealPlanTabWrapper
@@ -11968,6 +11999,7 @@ function App() {
             />
             </div>
           )}
+          </AnimatePresence>
 
           <div style={{ height:80 }} />
 
@@ -11977,15 +12009,19 @@ function App() {
           {/* Bottom nav + More drawer */}
           <div style={S.bottomNav}>
             {[["today","📅","Today"],["metrics","📊","Metrics"],["meals","🍽️","Meals"],["logs","📋","Logs"],["progress","📈","Progress"]].map(([k,ic,lb]) => (
-              <button key={k} onClick={() => { setDashTab(k); setShowMoreMenu(false); }}
+              <motion.button key={k} onClick={() => { setDashTab(k); setShowMoreMenu(false); }}
+                whileTap={{ scale: 0.85 }}
                 style={{ flex:1, background:"none", border:"none", padding:"8px 2px 6px",
                   cursor:"pointer", display:"flex", flexDirection:"column",
                   alignItems:"center", gap:2,
                   color: dashTab===k ? COLORS.accent : COLORS.muted,
                   fontSize:10, fontFamily:FONTS.body }}>
-                <span style={{ fontSize:22, lineHeight:1.1 }}>{ic}</span>
+                <motion.span
+                  animate={{ scale: dashTab===k ? 1.2 : 1 }}
+                  transition={{ type:"spring", stiffness:400, damping:20 }}
+                  style={{ fontSize:22, lineHeight:1.1 }}>{ic}</motion.span>
                 <span>{lb}</span>
-              </button>
+              </motion.button>
             ))}
             <button onClick={() => setShowMoreMenu(m=>!m)}
               style={{ flex:1, background:"none", border:"none", padding:"8px 2px 6px",
@@ -11998,10 +12034,15 @@ function App() {
             </button>
           </div>
 
+          <AnimatePresence>
           {showMoreMenu && <>
-            <div onClick={() => setShowMoreMenu(false)}
+            <motion.div onClick={() => setShowMoreMenu(false)}
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
               style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:1001 }} />
-            <div style={S.drawer}>
+            <motion.div style={S.drawer}
+              initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
+              transition={{ type:"spring", stiffness:380, damping:32 }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
                 <div style={{ fontFamily:FONTS.head, fontWeight:700, fontSize:15, color:COLORS.text }}>More</div>
                 <button onClick={() => setShowMoreMenu(false)}
@@ -12022,8 +12063,9 @@ function App() {
                   </button>
                 ))}
               </div>
-            </div>
+            </motion.div>
           </>}
+          </AnimatePresence>
 
         <FeedbackButton currentUser={currentUser} notify={notify}
           COLORS={COLORS} FONTS={FONTS} S={S} />
