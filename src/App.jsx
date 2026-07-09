@@ -2499,7 +2499,7 @@ Give response as JSON only (no markdown):
   };
 
   const typeColor = (type) => type==="positive" ? COLORS.success : type==="warning" ? COLORS.warn : COLORS.accent2;
-  const typeBg   = (type) => type==="positive" ? `${COLORS.success}0d` : type==="warning" ? `${COLORS.warn}0d` : `${COLORS.accent2}0d`;
+  const typeBg   = (type) => type==="positive" ? `${COLORS.success}18` : type==="warning" ? `${COLORS.warn}18` : `${COLORS.accent2}18`;
 
   return (
     <div style={{ ...S.metricCard, marginBottom:14 }}>
@@ -2532,11 +2532,11 @@ Give response as JSON only (no markdown):
         <div>
           {/* Overall score */}
           <div style={{ display:"flex", alignItems:"center", gap:14, padding:"12px 14px",
-            background:`${COLORS.accent}0d`, borderRadius:10, marginBottom:12,
-            border:`1px solid ${COLORS.accent}33` }}>
+            background:`${COLORS.accent}18`, borderRadius:10, marginBottom:12,
+            border:`1px solid ${COLORS.accent}44` }}>
             <div style={{ textAlign:"center", flexShrink:0 }}>
               <div style={{ fontSize:28, fontWeight:800, color:COLORS.accent, fontFamily:FONTS.head }}>{insights.overall_score}/10</div>
-              <div style={{ fontSize:10, color:COLORS.muted }}>Health Score</div>
+              <div style={{ fontSize:10, color:COLORS.text, opacity:0.7 }}>Health Score</div>
             </div>
             <div style={{ fontSize:13, color:COLORS.text, lineHeight:1.6 }}>{insights.overall_message}</div>
           </div>
@@ -2545,11 +2545,11 @@ Give response as JSON only (no markdown):
           <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:12 }}>
             {(insights.insights||[]).map((ins,i) => (
               <div key={i} style={{ display:"flex", gap:10, padding:"10px 12px",
-                borderRadius:10, background:typeBg(ins.type), border:`1px solid ${typeColor(ins.type)}33` }}>
+                borderRadius:10, background:typeBg(ins.type), border:`1px solid ${typeColor(ins.type)}55` }}>
                 <span style={{ fontSize:20, flexShrink:0 }}>{ins.icon}</span>
                 <div>
                   <div style={{ fontWeight:700, fontSize:13, color:typeColor(ins.type), marginBottom:3 }}>{ins.title}</div>
-                  <div style={{ fontSize:12, color:COLORS.muted, lineHeight:1.5 }}>{ins.message}</div>
+                  <div style={{ fontSize:12, color:COLORS.text, opacity:0.8, lineHeight:1.5 }}>{ins.message}</div>
                 </div>
               </div>
             ))}
@@ -2558,7 +2558,7 @@ Give response as JSON only (no markdown):
           {/* Top priority */}
           {insights.top_priority && (
             <div style={{ padding:"10px 14px", borderRadius:10,
-              background:`${COLORS.accent3}0d`, border:`1px solid ${COLORS.accent3}44` }}>
+              background:`${COLORS.accent3}18`, border:`1px solid ${COLORS.accent3}55` }}>
               <div style={{ fontWeight:700, fontSize:12, color:COLORS.accent3, marginBottom:4 }}>🎯 TOP PRIORITY</div>
               <div style={{ fontSize:13, color:COLORS.text }}>{insights.top_priority}</div>
             </div>
