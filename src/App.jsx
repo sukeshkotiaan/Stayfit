@@ -25,6 +25,7 @@ async function callAI(prompt, maxTokens = 8000, imageBase64 = null) {
 // ── Theme (inlined — no separate theme.js needed) ─────────────────────────────
 import { resolveIsDark, getThemeColors, loadStoredTheme, saveTheme, applyCssVars, buildStyles, globalStylesCss, GlobalStyles, MeshBackground, ThemePicker } from "./components/Theme";
 import LandingPage from "./pages/LandingPage";
+import { LOGO_SRC, COLORS, FONTS, INITIAL_USERS, GOALS, FOOD_PREFS, FITNESS_LEVELS, WORKOUT_TYPES, WORKOUT_FREQUENCIES, MEDICAL_CONDITIONS, COUNTRY_STATES, COUNTRY_FOODS, DEFAULT_FOODS, HEALTHY_SWAPS, PREF_FOODS } from "./data/constants";
 function getFoodsByPref(country, foodPref, mealKey) {
   if (!foodPref) return (COUNTRY_FOODS[country] || DEFAULT_FOODS)[mealKey] || [];
   const prefFoods = PREF_FOODS[country]?.[foodPref]?.[mealKey];
