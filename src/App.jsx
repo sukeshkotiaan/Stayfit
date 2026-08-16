@@ -10812,16 +10812,30 @@ function App() {
 
           {/* Bottom nav + More drawer */}
           <div style={S.bottomNav}>
-            {[["today","📅","Today"], ["meals","🍽️","Meals"], ["logs","📋","Track"], ["settings","⚙️","Settings"]].map(([k,ic,lb]) => (
-              <motion.button key={k} onClick={() => { setDashTab(k); setShowMoreMenu(false); }}
+            {[
+              ["today", "📅", "Today"], 
+              ["meals", "🍽️", "Meals"], 
+              ["logs", "📋", "Track"], 
+              ["settings", "⚙️", "Settings"],
+              ["more", "➕", "More"]
+            ].map(([k, ic, lb]) => (
+              <motion.button key={k} 
+                onClick={() => { 
+                  if (k === "more") {
+                    setShowMoreMenu(true);
+                  } else {
+                    setDashTab(k); 
+                    setShowMoreMenu(false); 
+                  }
+                }}
                 whileTap={{ scale: 0.85 }}
                 style={{ flex:1, background:"none", border:"none", padding:"12px 2px 10px",
                   cursor:"pointer", display:"flex", flexDirection:"column",
                   alignItems:"center", gap:4,
-                  color: dashTab===k ? COLORS.accent : COLORS.muted,
-                  fontSize:11, fontFamily:FONTS.body, fontWeight: dashTab===k ? 600 : 400 }}>
+                  color: (dashTab===k || (k==="more" && showMoreMenu)) ? COLORS.accent : COLORS.muted,
+                  fontSize:11, fontFamily:FONTS.body, fontWeight: (dashTab===k || (k==="more" && showMoreMenu)) ? 600 : 400 }}>
                 <motion.span
-                  animate={{ scale: dashTab===k ? 1.15 : 1 }}
+                  animate={{ scale: (dashTab===k || (k==="more" && showMoreMenu)) ? 1.15 : 1 }}
                   transition={{ type:"spring", stiffness:400, damping:20 }}
                   style={{ fontSize:22, lineHeight:1.1, marginBottom:4 }}>{ic}</motion.span>
                 <span>{lb}</span>
