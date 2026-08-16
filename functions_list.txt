@@ -1,0 +1,105 @@
+67:function resolveIsDark(themeMode) {
+76:function getThemeColors(isDark) {
+80:function loadStoredTheme() {
+88:function saveTheme(themeMode) {
+94:function applyCssVars(C, isDark) {
+104:function buildStyles(C, isDark) {
+286:function globalStylesCss(isDark) {
+315:function GlobalStyles({ isDark }) {
+319:function MeshBackground({ C, isDark }) {
+342:function ThemePicker({ themeMode, setThemeMode, COLORS, S, FONTS }) {
+530:function getFoodsByPref(country, foodPref, mealKey) {
+842:function getFoodMacros(foodName) {
+854:function getFoodHealth(foodName) {
+883:function classifyUnknownFood(lower) {
+957:function filterExercisesForMedical(exercises, conditions) {
+965:function getMedicalWorkoutWarnings(conditions) {
+971:function getMedicalIntensityLimit(conditions) {
+981:function calcBMI(w, h) { return +(w / ((h / 100) ** 2)).toFixed(1); }
+985:function calcBodyFat(bmi, age, gender) {
+991:function calcBMR(w, h, age, gender) {
+999:function calcSkeletalMuscle(w, bf) { return +(w * (1 - bf / 100) * 0.45).toFixed(1); }
+1004:function calcMuscleMass(w, bf) { return +(w * (1 - bf / 100) * 0.50).toFixed(1); }
+1007:function calcFatFree(w, bf) { return +(w * (1 - bf / 100)).toFixed(1); }
+1010:function calcSubFat(w, bf) { return +(w * bf / 100 * 0.80).toFixed(1); }
+1018:function calcVisceralFat(w, bf, age, gender) {
+1029:function calcBodyWater(w, bf, gender, age, h) {
+1039:function calcBoneMass(w, gender, bf) {
+1046:function calcProtein(w) { return +(w * 1.6).toFixed(1); }
+1049:function calcMuscleStorage(mm) { return +(mm * 0.025).toFixed(1); }
+1052:function calcMetabolicAge(bmr, age, gender, weight, height, bodyFat, visceralFat) {
+1076:function computeAllMetrics({ weight: w, height: h, age, gender }) {
+1098:function bmiCategory(bmi) {
+1104:function healthScore(metrics) {
+1113:function calcSmartTimes(schedule) {
+1173:function calcDailyWater(weight, fitnessLevel) {
+1198:function getTodayQuote() {
+1204:function calcStreak(logs) {
+1223:function BMIGauge({ bmi, color, label }) {
+1276:function GoalRing({ current, target, start, color, size = 80 }) {
+1356:function normalizeUserId(id) {
+1399:function toTitleCase(str) {
+1404:function ActivityInput({ newSlot, setNewSlot, addSlot, S, COLORS }) {
+1459:function MedicalFoodAlert({ conditions, COLORS }) {
+1483:function MedicalWorkoutAlert({ conditions, COLORS }) {
+1502:function SimpleLineChart({ data, color, targetWeight }) {
+1606:function FoodMealPicker({ mealKey, foods, selectedFoods, setSelectedFoods, country, foodPref, COLORS, S }) {
+1672:function WaterTracker({ dailyWater, userId, waterTimes, S, COLORS, FONTS }) {
+1723:function TodayTimeline({ timeline, userId, S, COLORS, FONTS }) {
+1771:function FoodScoreRow({ entry, isLast, COLORS }) {
+1828:function LogsWrapper({ userId, userLogs, foodLogs, sleepLogs, calorieBurns, profile, onBurnSaved, onSaved, onFoodSaved, COLORS, FONTS, S }) {
+1871:function FoodScoreWrapper({ likedFoods, conditions, S, COLORS, FONTS, onGoToSettings }) {
+1897:function FoodScoreTab({ likedFoods, conditions, S, COLORS, FONTS, onGoToSettings }) {
+2038:function GroceryListView({ activeDays, dayIngredients, copiedGrocery, setCopiedGrocery, COLORS, FONTS, S }) {
+2118:function StepCounter({ userId, COLORS, FONTS, S }) {
+2372:function AchievementBadges({ userLogs, foodLogs, sleepLogs, calorieBurns, COLORS, FONTS, S }) {
+2438:function AIHealthInsights({ currentUser, profile, metrics, userLogs, foodLogs, sleepLogs, calorieBurns, COLORS, FONTS, S }) {
+2574:function HealthVitalsTab({ userId, COLORS, FONTS, S }) {
+2790:function getSleepQuality(hours) {
+2830:function SleepTracker({ userId, sleepLogs, onSaved, COLORS, FONTS, S }) {
+2953:function CalorieBurnTab({ userId, calorieBurns, onBurnSaved, COLORS, FONTS, S }) {
+3168:function FoodLog({ userId, foodLogs, onLogsChange, profile, S, COLORS, FONTS }) {
+3359:function FriendsTab({ currentUser, userLogs, foodLogs, sleepLogs, calorieBurns, metrics, COLORS, FONTS, S, notify }) {
+3594:function HealthReportPrint({ user, profile, metrics, userLogs, foodLogs, sleepLogs, calorieBurns, stepLogs, COLORS }) {
+3922:function PrintReportButton({ currentUser, profile, metrics, userLogs, foodLogs, sleepLogs, calorieBurns, stepLogs, COLORS, FONTS, S, label }) {
+3993:function SettingsPanel({ currentUser, users, setUsers, setCurrentUser, scheduleSlots, setScheduleSlots, selectedFoods, setSelectedFoods, activeMealTab, setActiveMealTab, notify, S, COLORS, onSaved, themeMode, setThemeMode }) {
+4390:function MealPlanTabWrapper({ currentUser, profile, metrics, smartTimes, likedFoods, dailyWater, COLORS, S, fetchLatestProfile, setCurrentUser }) {
+4481:function isPantryItem(name) {
+4557:function getIngredients(foodName) {
+4573:function normalizePlanToWeekly(plan) {
+4588:function AIMealPlan({ profile, metrics, smartTimes, likedFoods, dailyWater, COLORS, FONTS, S, userId, onPlanSaved }) {
+5025:function AdminDietPlan({ p, metrics, u, COLORS, onPlanSaved }) {
+5451:function AdminUserList({ adminUsers, deleteUser, enableUser, approveUser, rejectUser, changeUserPassword, COLORS, S, FONTS, allFoodLogs }) {
+5491:function AdminPanel({ adminUsers, deleteUser, enableUser, approveUser, rejectUser, changeUserPassword, COLORS, S, FONTS, allFoodLogs, currentUserId, notify }) {
+5651:function AdminCompetitions({ allUsers, currentUserId, COLORS, S, FONTS, notify }) {
+5938:function UserCompetitions({ userId, userName, currentWeight, userLogs, COLORS, S, FONTS, notify }) {
+6174:function UserCard({ u, deleteUser, enableUser, approveUser, rejectUser, changeUserPassword, COLORS, S, allFoodLogs }) {
+6873:function BroadcastBanner({ COLORS }) {
+6902:function BroadcastHistory({ COLORS, FONTS, S }) {
+6928:function AdminFeedbackTab({ COLORS, FONTS, S }) {
+7035:function FeedbackButton({ currentUser, notify, COLORS, FONTS, S }) {
+7146:function saveSession(user) {
+7149:function loadSession() {
+7158:function clearSession() {
+7163:function CalorieBarChart({ data, targetCal, COLORS, FONTS }) {
+7217:function getFoodQuantityOptions(foodName) {
+7259:function calcCalForQty(qtyOption, qtyType, baseCal) {
+7282:function MealFoodEntry({ mealType, userId, loggedDate, onSaved, COLORS, FONTS, S }) {
+7648:function HealthDrinksSoupsTab({ type, COLORS, FONTS, S }) {
+7749:function RestTimer({ S, COLORS, FONTS, userId, onCalorieSaved }) {
+7964:function AIChatCoach({ profile, metrics, COLORS, FONTS, S }) {
+8087:function SmartGroceryList({ profile, likedFoods, COLORS, FONTS, S }) {
+8211:function GroupChallenges({ currentUser, userLogs, calorieBurns, foodLogs, COLORS, FONTS, S, notify }) {
+8368:function ProgressPhotos({ userId, COLORS, FONTS, S }) {
+8470:function BloodReportAnalysis({ COLORS, FONTS, S }) {
+8595:function CustomWorkoutBuilder({ userId, COLORS, FONTS, S }) {
+8729:function RestDayPlanner({ calorieBurns, profile, COLORS, FONTS, S }) {
+8819:function StepsCalorieBurn({ profile, userId, onBurnSaved, COLORS, FONTS, S }) {
+8942:function HabitTracker({ COLORS, FONTS, S }) {
+9040:function RecipeBuilder({ onPickRecipe, COLORS, FONTS, S }) {
+9126:function WaterLog({ userId, loggedDate, foodLogs, onLogsChange, targetWater, COLORS, FONTS, S }) {
+9345:function MealSection({ meal, entries, mealTotal, userId, loggedDate, onLogsChange, deleteEntry, statusColor, COLORS, FONTS, S }) {
+9568:function CorrelationGraphs({ userLogs, sleepLogs, calorieBurns, foodLogs, COLORS, FONTS, S }) {
+9711:function WeeklyScheduleExpand({ workout, S, COLORS, FONTS }) {
+9794:function AdminUserDataView({ userId, collection: col, COLORS, FONTS, S, render, renderFn }) {
+9810:function App() {

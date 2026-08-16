@@ -1,7 +1,7 @@
 {
-  "short_name": "JIS Stayfit",
-  "name": "JIS Stayfit — AI Health Coach",
-  "description": "Your AI-powered health and weight loss coach",
+  "short_name": "VitaTrack",
+  "name": "VitaTrack — AI Health Coach",
+  "description": "Your AI-powered health and fitness coach",
   "icons": [
     { "src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png" },
     { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
@@ -10,8 +10,8 @@
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "theme_color": "#070d1a",
-  "background_color": "#070d1a",
+  "theme_color": "#0a0a0a",
+  "background_color": "#0a0a0a",
   "categories": ["health", "fitness", "lifestyle"],
   "prefer_related_applications": false
 }
