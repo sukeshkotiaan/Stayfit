@@ -6923,6 +6923,1974 @@ function WeeklyScheduleExpand({ workout, S, COLORS, FONTS }) {
 
 // ── AdminPanel — wrapper with Users / Challenges section tabs ─────────────────
 
+function AdminDietPlan({ p, metrics, u, COLORS, onPlanSaved }) {
+  const [plan, setPlan] = useState(p.savedMealPlan || null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [aiProvider, setAiProvider] = useState("");
+  const [adminDay, setAdminDay] = useState("Monday"); // hoisted from render IIFE
+  const hasFoods = p.likedFoods && Object.values(p.likedFoods).some(f => f?.length > 0);
+
+  // Load from saved plan only — NO auto-generate in admin
+  useEffect(() => {
+    if (p.savedMealPlan) setPlan(p.savedMealPlan);
+  }, [p.savedMealPlan]);
+
+  async function generate() {
+    setLoading(true); setError("");
+    const bmr = metrics?.bmr || 1800;
+    // Use user's actual fitness level (not hardcoded Moderate)
+    const actMult = p.fitnessLevel === "Active" ? 1.55 : p.fitnessLevel === "Moderate" ? 1.375 : 1.2;
+    const tdeeRaw = Math.round(bmr * actMult);
+    // Apply 500 kcal deficit for weight loss goals, maintenance otherwise
+    const isWeightLoss = (p.goal || "").toLowerCase().includes("lose");
+    const targetCal = isWeightLoss ? tdeeRaw - 500 : tdeeRaw;
+    const protein = metrics?.protein || Math.round((parseFloat(p.weight)||70)*1.6);
+
+    const prompt = `You are a certified clinical nutritionist building a 7-day personalised meal plan as a health professional.
+
+USER PROFILE:
+- Age: ${p.age} | Gender: ${p.gender} | Weight: ${p.weight}kg | Height: ${p.height}cm
+- Goal: ${p.goal || "Improve health"}
+- Food Preference: ${p.foodPref || "Mixed"} (STRICT — no meat/eggs for Vegetarian; no animal products for Vegan)
+- Country: ${p.country || "India"} (use authentic regional foods)
+- Daily Calorie Target: ${targetCal} kcal (BMR ${bmr} × activity ${actMult} = TDEE ${tdeeRaw}${isWeightLoss ? ` − 500 deficit = ${targetCal}` : ""}) | Protein Target: ${protein}g
+- Medical Conditions: ${(p.conditions||[]).join(", ")||"None"}
+- Medications: ${p.medications||"None"}
+
+USER'S FOOD PREFERENCES (analyse each for healthiness):
+- Breakfast: ${(p.likedFoods?.Breakfast||[]).join(", ")||"Any"}
+- Lunch: ${(p.likedFoods?.Lunch||[]).join(", ")||"Any"}
+- Evening Snack: ${(p.likedFoods?.["Evening Snack"]||[]).join(", ")||"Any"}
+- Dinner: ${(p.likedFoods?.Dinner||[]).join(", ")||"Any"}
+- Munching: ${(p.likedFoods?.Munching||[]).join(", ")||"Nuts"}
+- Preferred Fruits: ${(p.likedFoods?.Fruits||[]).join(", ")||"Seasonal fruits"}
+
+━━━ BALANCED MEAL REQUIREMENTS (MANDATORY) ━━━
+
+LUNCH must contain ALL FOUR:
+  ✦ PROTEIN — dal, legumes, eggs, chicken, paneer, tofu, fish
+  ✦ FIBRE — green vegetables, salad, sabzi, beans
+  ✦ COMPLEX CARBS — brown rice, multigrain roti, millets
+  ✦ WATERY FRUIT — 1 cooling fruit side (watermelon, orange, papaya, pear, cucumber)
+
+DINNER must contain ALL FOUR:
+  ✦ LEAN PROTEIN — grilled/baked source (fish, chicken, dal, tofu, eggs, paneer)
+  ✦ FIBRE-RICH VEGETABLES — 2+ colourful vegetables (spinach, broccoli, carrots, bottle gourd)
+  ✦ LIGHT CARBS — 1-2 rotis or small rice; prefer millets/dalia at dinner
+  ✦ GUT-HEALTHY ELEMENT — curd, buttermilk, raita, or fermented food
+
+━━━ GUT HEALTH & DRINKS (MANDATORY DAILY) ━━━
+Distribute across meals:
+  • Morning: Warm lemon water or jeera water (add to breakfast)
+  • Lunch: Curd / yogurt / raita / buttermilk
+  • Evening: Ginger tea or coconut water
+  • Night: Turmeric milk / golden milk or chamomile tea
+  • Include 1 prebiotic food (banana, oats, garlic, onion, flaxseeds)
+  • Include 1 probiotic food (curd, idli, dosa, dhokla, fermented pickle)
+
+━━━ FRUIT INTEGRATION ━━━
+- Include preferred fruits naturally (breakfast, snack, or lunch side)
+- Prefer watery fruits at lunch, antioxidant fruits at breakfast/snack
+
+━━━ FOOD HEALTH ASSESSMENT & SWAP RULES (CRITICAL) ━━━
+
+For EVERY food item the user has selected, you MUST assess its healthiness:
+
+UNHEALTHY indicators (replace these):
+  ✗ Deep-fried foods: samosa, puri, bhatura, fried pakora, vada, poori
+  ✗ High sugar: mithai, ladoo, halwa, gulab jamun, jalebi, cake, pastry, biscuits
+  ✗ Refined carbs: white bread, maida roti, ultra-processed cereals
+  ✗ High-fat processed: butter naan (excess), cream-heavy curries, full-fat fried snacks
+  ✗ Sugary drinks: packaged fruit juice, soda, sweetened chai, cold drinks
+  ✗ Excessive oil: restaurant-style deep-fried items
+
+HEALTHY SWAP LOGIC:
+  → Replace unhealthy item with the healthiest similar alternative
+  → Keep the SAME MEAL CATEGORY and similar taste profile
+  → Mark swapped items with swapped:true, originalFood and swapReason
+  → Example: "Samosa" → "Roasted Chana Chaat" (swapReason: "Samosa is deep-fried with ~250 kcal & 15g fat. Roasted chana gives same crunch with 3x protein and 80% less fat.")
+  → Example: "White Bread" → "Multigrain Toast" (swapReason: "White bread spikes blood sugar rapidly (GI 75). Multigrain has 3x fibre, lower GI 48, and keeps you full longer.")
+  → Example: "Biscuits with Chai" → "Makhana (Fox nuts) with Chai" (swapReason: "Biscuits contain refined flour & 8-12g added sugar per serving. Makhana is low-calorie, high-protein, and anti-inflammatory.")
+
+HEALTHY items: ALWAYS include as-is (dal, sabzi, curd, fruits, nuts, grilled items, multigrain roti, oats, eggs, lean meats)
+
+IMPORTANT: Even if ALL user-selected foods are unhealthy, build the plan with healthy alternatives. Never include unhealthy foods just because user likes them. Health > preference. But ALWAYS explain why via swapReason.
+
+━━━ MANDATORY RULES ━━━
+1. FOOD PREFERENCE STRICT — Vegetarian: no meat/seafood/eggs. Vegan: no dairy/eggs/meat. Non-Veg: all fine.
+2. QUANTITIES EXACT — "1 cup (200g)", "2 rotis (60g each)", "1 glass (200ml)"
+3. CALORIES per item mandatory
+4. VARIETY — rotate dishes across 7 days, no same meal two days in a row
+5. MEDICAL — strictly exclude trigger foods for listed conditions
+
+Return ONLY valid JSON, no markdown, in this EXACT 7-day format:
+{
+  "Monday": {
+    "breakfast": { "time":"8:00 AM", "items":[{"food":"name","qty":"amount","cal":0,"healthy":true,"swapped":false,"originalFood":null,"swapReason":null,"type":"food|drink|fruit"}], "totalCal":0, "note":"nutritional tip" },
+    "lunch": { "time":"1:00 PM", "items":[{"food":"name","qty":"amount","cal":0,"healthy":true,"swapped":false,"originalFood":null,"swapReason":null,"type":"food|drink|fruit"}], "totalCal":0, "note":"tip" },
+    "eveningSnack": { "time":"5:00 PM", "items":[{"food":"name","qty":"amount","cal":0,"healthy":true,"swapped":false,"originalFood":null,"swapReason":null,"type":"food|drink|fruit"}], "totalCal":0, "note":"tip" },
+    "dinner": { "time":"8:00 PM", "items":[{"food":"name","qty":"amount","cal":0,"healthy":true,"swapped":false,"originalFood":null,"swapReason":null,"type":"food|drink|fruit"}], "totalCal":0, "note":"tip" },
+    "munching": { "time":"Anytime", "items":[{"food":"name","qty":"amount","cal":0,"healthy":true,"swapped":false,"originalFood":null,"swapReason":null,"type":"food|drink|fruit"}], "totalCal":0, "note":"tip" },
+    "dailyDrinks": ["Morning: warm lemon water","Afternoon: buttermilk","Evening: ginger tea","Night: turmeric milk"],
+    "gutTip": "one daily gut health tip",
+    "totalDayCal": 0,
+    "water": "as per daily target"
+  },
+  "Tuesday": {},
+  "Wednesday": {},
+  "Thursday": {},
+  "Friday": {},
+  "Saturday": {},
+  "Sunday": {}
+}`;
+
+    try {
+      const { text: rawText, provider } = await callAI(prompt, 8000);
+
+      // Repair truncated JSON — if response was cut off, find the last complete day
+      let clean = rawText.trim();
+
+      // Remove any trailing incomplete content after the last complete "}" for Sunday
+      // Strategy: try parse first, if fails try to find and close the last complete object
+      let parsed = null;
+      try {
+        parsed = JSON.parse(clean);
+      } catch(parseErr) {
+        console.warn("JSON truncated, attempting repair...", parseErr.message);
+        // Find the last complete day block by finding matching braces
+        // Remove everything after the last successfully closed day
+        const days = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+        for (let d = days.length - 1; d >= 0; d--) {
+          const dayKey = `"${days[d]}"`;
+          const idx = clean.lastIndexOf(dayKey);
+          if (idx === -1) continue;
+          // Try truncating after this day's content
+          // Find the closing brace for this day by counting depth
+          let depth = 0, start = clean.indexOf("{", idx), end = -1;
+          for (let i = start; i < clean.length; i++) {
+            if (clean[i] === "{") depth++;
+            else if (clean[i] === "}") { depth--; if (depth === 0) { end = i; break; } }
+          }
+          if (end > 0) {
+            // Build repaired JSON with only complete days
+            const repaired = clean.substring(0, end + 1) + "\n}";
+            try {
+              parsed = JSON.parse(repaired);
+              console.log(`Repaired: kept days up to ${days[d]}`);
+              break;
+            } catch(e2) { continue; }
+          }
+        }
+        if (!parsed) throw new Error("JSON repair failed: " + parseErr.message);
+      }
+
+      // Fill missing days by copying from available days
+      const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+      const available = DAYS.filter(d => parsed[d] && Object.keys(parsed[d]).length > 0);
+      if (available.length > 0) {
+        DAYS.forEach((d, i) => {
+          if (!parsed[d] || Object.keys(parsed[d]).length === 0) {
+            parsed[d] = { ...parsed[available[i % available.length]] };
+          }
+        });
+      }
+
+      setPlan(parsed);
+      setAiProvider(provider);
+      console.log("Diet plan generated via", provider, "- days:", Object.keys(parsed).join(", "));
+      if (onPlanSaved) onPlanSaved(parsed);
+    } catch(e) {
+      console.error("AI diet plan error:", e);
+      if (e.message?.includes("RATE_LIMITED") || e.message?.includes("429")) {
+        setError("All AI providers are rate-limited. Please wait 1–2 minutes and try again.");
+      } else {
+        setError("Could not generate plan: " + e.message);
+      }
+    }
+    setLoading(false);
+  }
+
+  const mealColors = { "Breakfast":"#4f8ef7","Lunch":"#f7934f","Evening Snack":"#00d4aa","Dinner":"#00d4aa","Munching":"#8892aa" };
+  const mealIcons = { "Breakfast":"🌅","Lunch":"☀️","Evening Snack":"🍎","Dinner":"🌙","Munching":"🥜" };
+
+  return (
+    <div>
+      <MedicalFoodAlert conditions={p.conditions} COLORS={{ accent: "#00d4aa", warn: "#f7504f", muted: "#8892aa", text: "#f0f4ff", card2: "#1a2236", bg: "#0a0f1e", border: "rgba(255,255,255,0.08)", accent2: "#4f8ef7", accent3: "#f7934f" }} />
+      {/* Summary bar */}
+      {metrics && (
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))", gap:8, marginBottom:12 }}>
+          {[
+            (() => {
+              const am = p.fitnessLevel === "Active" ? 1.55 : p.fitnessLevel === "Moderate" ? 1.375 : 1.2;
+              const tdeeDisp = Math.round(metrics.bmr * am);
+              const isWL = (p.goal || "").toLowerCase().includes("lose");
+              const targetDisp = isWL ? tdeeDisp - 500 : tdeeDisp;
+              return ["Daily Target", `${targetDisp} kcal`, "#00d4aa"];
+            })(),
+            ["Protein Target", `${metrics.protein}g`, "#4f8ef7"],
+            ["Water Target", `${metrics.dailyWater}L`, "#4f8ef7"],
+            ...(plan ? (() => {
+              // Support both old (plan.totalCal) and new (plan.Monday.totalDayCal) formats
+              const dayCal = plan.totalCal || plan["Monday"]?.totalDayCal || 0;
+              const dayProtein = plan.totalProtein || 0;
+              return [
+                ["Day Calories", `${dayCal} kcal`, dayCal > Math.round(metrics.bmr * (p.fitnessLevel === "Active" ? 1.55 : p.fitnessLevel === "Moderate" ? 1.375 : 1.2)) ? "#f7504f" : "#00d4aa"],
+                ...(dayProtein > 0 ? [["Day Protein", `${dayProtein}g`, "#4f8ef7"]] : []),
+              ];
+            })() : [])
+          ].map(([l,v,c]) => (
+            <div key={l} style={{ background:"#0a0f1e", borderRadius:8, padding:"8px 12px" }}>
+              <div style={{ fontSize:10, color:"#8892aa", fontWeight:600, marginBottom:2 }}>{l.toUpperCase()}</div>
+              <div style={{ fontSize:15, fontWeight:700, color:c }}>{v}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Regenerate button + provider badge */}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10, flexWrap:"wrap", gap:8 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          {aiProvider && (
+            <span style={{ fontSize:11, padding:"2px 10px", borderRadius:20, fontWeight:700,
+              background: aiProvider === "Claude" ? "#7c3aed22" : "#00d4aa15",
+              color: aiProvider === "Claude" ? "#a78bfa" : "#00d4aa",
+              border: `1px solid ${aiProvider === "Claude" ? "#7c3aed44" : "#00d4aa33"}`,
+            }}>
+              ✦ Generated by {aiProvider}
+            </span>
+          )}
+          {loading && (
+            <span style={{ fontSize:11, color:"#8892aa" }}>
+              Trying Gemini → Claude fallback if needed...
+            </span>
+          )}
+        </div>
+        <button onClick={generate} disabled={loading} style={{ background:"transparent", border:`1px solid rgba(255,255,255,0.08)`, borderRadius:8, padding:"6px 14px", color: loading ? "#8892aa" : "#00d4aa", fontSize:12, cursor: loading?"not-allowed":"pointer" }}>
+          {loading ? "Generating..." : plan ? "↻ Regenerate Plan" : "✨ Generate Plan"}
+        </button>
+      </div>
+
+      {error && <div style={{ color:"#f7504f", fontSize:13, marginBottom:10 }}>{error}</div>}
+
+      {loading && (
+        <div style={{ textAlign:"center", padding:"2rem", color:"#8892aa", fontSize:13 }}>
+          AI is building a personalised diet plan for {u.name}...
+        </div>
+      )}
+
+      {!plan && !loading && (
+        <div style={{ textAlign:"center", padding:"2rem" }}>
+          {hasFoods ? (
+            <div>
+              <div style={{ fontSize: 28, marginBottom: 10 }}>🍽️</div>
+              <div style={{ fontSize: 14, color:"#f0f4ff", fontWeight:600, marginBottom:6 }}>No plan generated yet</div>
+              <div style={{ fontSize: 13, color:"#8892aa", marginBottom:14 }}>Click "✨ Generate Plan" above to create a personalised AI diet plan for this user.</div>
+            </div>
+          ) : (
+            <div>
+              <div style={{ fontSize: 28, marginBottom: 10 }}>📋</div>
+              <div style={{ fontSize: 14, color:"#f0f4ff", fontWeight:600, marginBottom:6 }}>No food preferences set</div>
+              <div style={{ fontSize: 13, color:"#8892aa" }}>User hasn't selected their food preferences yet. Ask them to go to My Preferences → Foods and save their selections first.</div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {plan && !loading && (() => {
+        // Support both plan formats:
+        // Old 1-day: { meals: { Breakfast: {...} }, dailyDrinks, gutTip }
+        // New 7-day: { Monday: { breakfast: {...}, ... }, Tuesday: {...} }
+        const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+        const is7Day = DAYS.some(d => plan[d]);
+        // adminDay state is hoisted to AdminDietPlan component level (see below)
+
+        if (is7Day) {
+          // 7-day format — show day tabs
+          const day = plan[adminDay] || {};
+          const mealKeyMap = [
+            { key:"breakfast", label:"Breakfast", icon:"🌅", col:"#4f8ef7" },
+            { key:"lunch", label:"Lunch", icon:"☀️", col:"#f7934f" },
+            { key:"eveningSnack", label:"Evening Snack", icon:"🍎", col:"#00d4aa" },
+            { key:"dinner", label:"Dinner", icon:"🌙", col:"#00d4aa" },
+            { key:"munching", label:"Munching", icon:"🥜", col:"#8892aa" },
+          ];
+          return (
+            <div>
+              <div style={{ display:"flex", gap:6, marginBottom:12, flexWrap:"wrap" }}>
+                {DAYS.map(d => (
+                  <button key={d} onClick={() => setAdminDay(d)}
+                    style={{ padding:"5px 12px", borderRadius:20, fontSize:12, cursor:"pointer",
+                      border: adminDay===d ? "none" : "1px solid rgba(255,255,255,0.08)",
+                      background: adminDay===d ? "linear-gradient(135deg,#00d4aa,#4f8ef7)" : "transparent",
+                      color: adminDay===d ? "#fff" : "#8892aa", fontWeight: adminDay===d ? 600 : 400 }}>
+                    {d.slice(0,3)}
+                  </button>
+                ))}
+              </div>
+              {/* Day header + swap summary */}
+              <div style={{ background:"#00d4aa0d", border:"1px solid #00d4aa22", borderRadius:8, padding:"8px 14px", marginBottom:10, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                <span style={{ fontSize:13, fontWeight:700, color:"#f0f4ff" }}>{adminDay}</span>
+                <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                  {(() => {
+                    const allItems = ["breakfast","lunch","eveningSnack","dinner","munching"].flatMap(k => day[k]?.items || []);
+                    const swappedCount = allItems.filter(i => i.swapped).length;
+                    return swappedCount > 0 ? (
+                      <span style={{ fontSize:11, padding:"2px 10px", borderRadius:20, background:"#00d4aa18", color:"#00d4aa", border:"1px solid #00d4aa33", fontWeight:600 }}>
+                        🔄 {swappedCount} unhealthy item{swappedCount > 1 ? "s" : ""} swapped
+                      </span>
+                    ) : (
+                      <span style={{ fontSize:11, padding:"2px 10px", borderRadius:20, background:"#22c55e12", color:"#22c55e", border:"1px solid #22c55e30", fontWeight:600 }}>
+                        ✅ All items healthy
+                      </span>
+                    );
+                  })()}
+                  <span style={{ fontSize:13, color:"#00d4aa", fontWeight:700 }}>{day.totalDayCal || "~"} kcal</span>
+                </div>
+              </div>
+              {mealKeyMap.map(({ key, label, icon, col }) => {
+                const meal = day[key]; if (!meal) return null;
+                return (
+                  <div key={key} style={{ background:"#0a0f1e", borderRadius:10, padding:"12px 14px", marginBottom:10, borderLeft:`3px solid ${col}` }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                        <span style={{ fontSize:18 }}>{icon}</span>
+                        <div>
+                          <div style={{ fontWeight:700, fontSize:14, color:"#f0f4ff" }}>{label}</div>
+                          <div style={{ fontSize:11, color:col, fontWeight:600 }}>{meal.time}</div>
+                        </div>
+                      </div>
+                      <div style={{ fontSize:16, fontWeight:700, color:col }}>{meal.totalCal} kcal</div>
+                    </div>
+                    {(meal.items||[]).map((item, i) => (
+                      <div key={i} style={{ marginBottom: item.swapped ? 6 : 2 }}>
+                        <div style={{ display:"flex", gap:8, padding:"7px 10px", borderRadius: item.swapped ? "8px 8px 0 0" : 8, background: item.swapped ? "rgba(0,212,170,0.06)" : i%2===0?"rgba(255,255,255,0.02)":"transparent", alignItems:"center", border: item.swapped ? "1px solid rgba(0,212,170,0.25)" : "none", borderBottom: item.swapped ? "none" : undefined }}>
+                          <div style={{ flex:1 }}>
+                            <div style={{ fontSize:13, color:"#f0f4ff", display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+                              {item.food}
+                              {item.swapped && (
+                                <span style={{ fontSize:10, background:"#00d4aa22", color:"#00d4aa", borderRadius:4, padding:"1px 6px", fontWeight:700, whiteSpace:"nowrap" }}>
+                                  🔄 SWAPPED
+                                </span>
+                              )}
+                              {item.type === "drink" && <span style={{ fontSize:9, color:"#0ea5e9", background:"#0ea5e918", borderRadius:3, padding:"1px 4px", fontWeight:700 }}>DRINK</span>}
+                              {item.type === "fruit" && <span style={{ fontSize:9, color:"#22c55e", background:"#22c55e18", borderRadius:3, padding:"1px 4px", fontWeight:700 }}>FRUIT</span>}
+                            </div>
+                            {item.swapped && item.originalFood && (
+                              <div style={{ fontSize:11, color:"#8892aa", marginTop:1 }}>
+                                Replaced: <span style={{ textDecoration:"line-through", color:"#f7504f" }}>{item.originalFood}</span>
+                              </div>
+                            )}
+                          </div>
+                          <div style={{ fontSize:12, color:"#8892aa", whiteSpace:"nowrap" }}>{item.qty}</div>
+                          <div style={{ fontSize:12, fontWeight:600, color: item.swapped ? "#00d4aa" : col, whiteSpace:"nowrap" }}>{item.cal||"—"} kcal</div>
+                        </div>
+                        {item.swapped && item.swapReason && (
+                          <div style={{ background:"rgba(0,212,170,0.05)", border:"1px solid rgba(0,212,170,0.2)", borderTop:"none", borderRadius:"0 0 8px 8px", padding:"7px 10px", fontSize:11, color:"#8892aa", lineHeight:1.5 }}>
+                            💡 <b style={{ color:"#00d4aa" }}>Why swapped:</b> {item.swapReason}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    {meal.note && <div style={{ fontSize:11, color:"#8892aa", marginTop:6, fontStyle:"italic", padding:"6px 10px", background:"rgba(255,255,255,0.03)", borderRadius:6 }}>💡 {meal.note}</div>}
+                  </div>
+                );
+              })}
+              {day.dailyDrinks?.length > 0 && (
+                <div style={{ background:"#0ea5e90d", border:"1px solid #0ea5e933", borderRadius:10, padding:"12px 14px", marginBottom:8 }}>
+                  <div style={{ fontWeight:700, fontSize:13, color:"#0ea5e9", marginBottom:6 }}>🥤 Daily Drinks</div>
+                  {day.dailyDrinks.map((d2, i) => <div key={i} style={{ fontSize:12, color:"#f0f4ff", display:"flex", gap:8 }}><span>💧</span>{d2}</div>)}
+                </div>
+              )}
+              {day.gutTip && <div style={{ background:"#22c55e0d", border:"1px solid #22c55e33", borderRadius:10, padding:"10px 14px" }}>
+                <div style={{ fontWeight:700, fontSize:12, color:"#22c55e", marginBottom:3 }}>🌿 Gut Tip</div>
+                <div style={{ fontSize:12, color:"#f0f4ff" }}>{day.gutTip}</div>
+              </div>}
+            </div>
+          );
+        }
+
+        // Legacy 1-day format fallback
+        return (
+          <div>
+            {Object.entries(plan.meals || {}).map(([meal, data]) => {
+              const col = mealColors[meal] || "#8892aa";
+              return (
+                <div key={meal} style={{ background:"#0a0f1e", borderRadius:10, padding:"12px 14px", marginBottom:10, borderLeft:`3px solid ${col}` }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                      <span style={{ fontSize:18 }}>{mealIcons[meal]||"🍽️"}</span>
+                      <div>
+                        <div style={{ fontWeight:700, fontSize:14, color:"#f0f4ff" }}>{meal}</div>
+                        <div style={{ fontSize:11, color:col }}>{data.time}</div>
+                      </div>
+                    </div>
+                    <div style={{ fontSize:16, fontWeight:700, color:col }}>{data.totalCal} kcal</div>
+                  </div>
+                  {(data.items||[]).map((item,i) => (
+                    <div key={i} style={{ display:"flex", gap:8, padding:"6px 8px", borderRadius:6, background:i%2===0?"rgba(255,255,255,0.02)":"transparent", fontSize:13, color:"#f0f4ff", alignItems:"center" }}>
+                      <div style={{ flex:1 }}>{item.food}</div>
+                      <div style={{ color:"#8892aa", fontSize:12 }}>{item.qty}</div>
+                      <div style={{ color:col, fontSize:12, fontWeight:600 }}>{item.cal||"—"} kcal</div>
+                    </div>
+                  ))}
+                  {data.tip && <div style={{ fontSize:11, color:"#8892aa", marginTop:6, fontStyle:"italic" }}>💡 {data.tip}</div>}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
+    </div>
+  );
+}
+
+
+// ── AdminUserDataView — loads Firebase collection for a user and renders ──────
+
+// ── AdminUserList ──
+
+function AdminUserList({ adminUsers, deleteUser, enableUser, approveUser, rejectUser, changeUserPassword, COLORS, S, FONTS, allFoodLogs }) {
+  const [searchQ, setSearchQ] = useState("");
+  const [filterStatus, setFilterStatus] = useState("all");
+  const approved = adminUsers.filter(u => u.approved !== false);
+  const filtered = approved.filter(u => {
+    const matchSearch = !searchQ || u.name?.toLowerCase().includes(searchQ.toLowerCase()) || u.username?.toLowerCase().includes(searchQ.toLowerCase()) || u.country?.toLowerCase().includes(searchQ.toLowerCase());
+    const matchStatus = filterStatus==="all" || (filterStatus==="active"&&u.active) || (filterStatus==="disabled"&&!u.active) || (filterStatus==="no-plan"&&!u.profile_data?.savedMealPlan);
+    return matchSearch && matchStatus;
+  });
+  return (
+    <div>
+      <div style={{ display:"flex", gap:10, marginBottom:14, flexWrap:"wrap", alignItems:"center" }}>
+        <div style={{ fontFamily:FONTS.head, fontSize:16, fontWeight:700, flex:1 }}>
+          All Users ({filtered.length}{filtered.length!==approved.length?` of ${approved.length}`:""})
+        </div>
+        <input style={{ ...S.input, maxWidth:220, padding:"8px 14px", fontSize:13 }}
+          placeholder="🔍 Search name, username, country..."
+          value={searchQ} onChange={e => setSearchQ(e.target.value)} />
+        <select style={{ ...S.select, maxWidth:160, padding:"8px 12px", fontSize:13 }} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+          <option value="all">All Users</option>
+          <option value="active">Active Only</option>
+          <option value="disabled">Disabled</option>
+          <option value="no-plan">No Meal Plan</option>
+        </select>
+      </div>
+      <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+        {filtered.length===0 ? (
+          <div style={{ padding:"2rem", textAlign:"center", color:COLORS.muted }}>No users match your search.</div>
+        ) : (
+          filtered.map(u => <UserCard key={u.id} u={u} deleteUser={deleteUser} enableUser={enableUser} approveUser={approveUser} rejectUser={rejectUser} changeUserPassword={changeUserPassword} COLORS={COLORS} S={S} FONTS={FONTS} allFoodLogs={allFoodLogs} />)
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+// ── Calorie Bar Chart ─────────────────────────────────────────────────────────
+
+// ── AdminPanel ──
+
+function AdminPanel({ adminUsers, deleteUser, enableUser, approveUser, rejectUser, changeUserPassword, COLORS, S, FONTS, allFoodLogs, currentUserId, notify }) {
+  const [adminSection, setAdminSection] = useState("users");
+  const [showAdminSettings, setShowAdminSettings] = useState(false);
+  const [newAdminPass, setNewAdminPass] = useState("");
+  const [confirmAdminPass, setConfirmAdminPass] = useState("");
+  const [passMsg, setPassMsg] = useState("");
+  const [broadcastMsg, setBroadcastMsg] = useState("");
+  const [broadcasting, setBroadcasting] = useState(false);
+
+  const allApproved = adminUsers.filter(u => u.approved !== false);
+  const pending = adminUsers.filter(u => u.approved === false);
+  const activeToday = allApproved.filter(u => {
+    if (!u.lastSeen) return false;
+    return (Date.now() - new Date(u.lastSeen).getTime()) < 24*60*60*1000;
+  });
+  const atRisk = allApproved.filter(u => {
+    if (!u.lastSeen) return true;
+    return (Date.now() - new Date(u.lastSeen).getTime()) > 7*24*60*60*1000;
+  });
+  const noMealPlan = allApproved.filter(u => !u.profile_data?.savedMealPlan);
+
+  const sendBroadcast = async () => {
+    if (!broadcastMsg.trim()) return;
+    setBroadcasting(true);
+    try {
+      await addDoc(collection(db, "broadcasts"), {
+        message: broadcastMsg.trim(),
+        created_at: new Date().toISOString(),
+        from: "Admin",
+      });
+      notify("✓ Broadcast sent to all users!");
+      setBroadcastMsg("");
+    } catch(e) { notify("Failed to send broadcast"); }
+    setBroadcasting(false);
+  };
+
+  const changeAdminPassword = async () => {
+    if (!newAdminPass || newAdminPass.length < 4) { setPassMsg("❌ Password must be at least 4 characters"); return; }
+    if (newAdminPass !== confirmAdminPass) { setPassMsg("❌ Passwords do not match"); return; }
+    try {
+      await updateDoc(doc(db, "users", "admin-001"), { password_hash: newAdminPass });
+      setPassMsg("✅ Admin password changed successfully!");
+      setNewAdminPass(""); setConfirmAdminPass("");
+      setTimeout(() => { setPassMsg(""); setShowAdminSettings(false); }, 2000);
+    } catch(e) { setPassMsg("❌ Error: " + e.message); }
+  };
+
+  return (
+    <div>
+      {/* Admin Dashboard Stats */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))", gap:8, marginBottom:14 }}>
+        {[
+          { label:"Total Users",   value:allApproved.length, color:COLORS.accent2, icon:"👥" },
+          { label:"Active Today",  value:activeToday.length, color:COLORS.success,  icon:"🟢" },
+          { label:"Pending",       value:pending.length,     color:pending.length>0?COLORS.accent3:COLORS.muted, icon:"⏳" },
+          { label:"At Risk (7d)",  value:atRisk.length,      color:atRisk.length>0?COLORS.warn:COLORS.muted, icon:"⚠️" },
+          { label:"No Meal Plan",  value:noMealPlan.length,  color:noMealPlan.length>0?COLORS.accent3:COLORS.muted, icon:"🍽️" },
+        ].map(({label,value,color,icon}) => (
+          <div key={label} style={{ ...S.metricCard, textAlign:"center", padding:"10px 8px",
+            background:`${color}0a`, border:`1px solid ${color}30` }}>
+            <div style={{ fontSize:18, marginBottom:2 }}>{icon}</div>
+            <div style={{ fontFamily:FONTS.head, fontSize:20, fontWeight:800, color }}>{value}</div>
+            <div style={{ fontSize:10, color:COLORS.muted, marginTop:2 }}>{label}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display:"flex", gap:6, marginBottom:16, overflowX:"auto", paddingBottom:4, scrollbarWidth:"none", alignItems:"center" }}>
+        {[["users","👥 Users"],["competitions","🏆 Challenges"],["feedback","💬 Feedback"],["broadcast","📢 Broadcast"]].map(([k,l]) => (
+          <button key={k} onClick={() => setAdminSection(k)}
+            style={{ ...S.pill(adminSection===k), whiteSpace:"nowrap", flexShrink:0, fontSize:13 }}>
+            {l}
+          </button>
+        ))}
+        <button onClick={() => setShowAdminSettings(s => !s)}
+          style={{ marginLeft:"auto", ...S.btnSm, padding:"7px 14px", fontSize:12, flexShrink:0,
+            color:COLORS.accent, borderColor:`${COLORS.accent}44` }}>
+          ⚙️ Admin Settings
+        </button>
+      </div>
+
+      {/* Admin Settings Panel */}
+      {showAdminSettings && (
+        <div style={{ ...S.metricCard, marginBottom:16, border:`1px solid ${COLORS.accent}44`,
+          background:`${COLORS.accent}06` }}>
+          <div style={{ fontFamily:FONTS.head, fontSize:14, fontWeight:700, color:COLORS.accent, marginBottom:14 }}>
+            🔐 Change Admin Password
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:12 }}>
+            <div>
+              <label style={S.label}>New Password</label>
+              <input type="password" style={S.input} placeholder="Min 4 characters"
+                value={newAdminPass} onChange={e => setNewAdminPass(e.target.value)} />
+            </div>
+            <div>
+              <label style={S.label}>Confirm Password</label>
+              <input type="password" style={S.input} placeholder="Repeat new password"
+                value={confirmAdminPass} onChange={e => setConfirmAdminPass(e.target.value)} />
+            </div>
+          </div>
+          {passMsg && (
+            <div style={{ fontSize:13, fontWeight:600, marginBottom:10,
+              color: passMsg.startsWith("✅") ? COLORS.success : COLORS.warn }}>
+              {passMsg}
+            </div>
+          )}
+          <div style={{ display:"flex", gap:10 }}>
+            <button onClick={changeAdminPassword}
+              style={{ ...S.btn, width:"auto", padding:"9px 24px", fontSize:13 }}>
+              🔐 Update Password
+            </button>
+            <button onClick={() => { setShowAdminSettings(false); setPassMsg(""); setNewAdminPass(""); setConfirmAdminPass(""); }}
+              style={{ ...S.btnSm, padding:"9px 18px" }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {adminSection === "users" && (
+        <AdminUserList adminUsers={adminUsers} deleteUser={deleteUser} enableUser={enableUser}
+          approveUser={approveUser} rejectUser={rejectUser}
+          changeUserPassword={changeUserPassword} COLORS={COLORS} S={S} FONTS={FONTS}
+          allFoodLogs={allFoodLogs} />
+      )}
+      {adminSection === "competitions" && (
+        <AdminCompetitions allUsers={adminUsers} currentUserId={currentUserId}
+          COLORS={COLORS} S={S} FONTS={FONTS} notify={notify} />
+      )}
+
+      {adminSection === "feedback" && (
+        <AdminFeedbackTab COLORS={COLORS} FONTS={FONTS} S={S} />
+      )}
+
+      {adminSection === "broadcast" && (
+        <div>
+          <div style={{ fontFamily:FONTS.head, fontSize:18, fontWeight:700, marginBottom:4 }}>📢 Broadcast Message</div>
+          <div style={{ fontSize:13, color:COLORS.muted, marginBottom:16 }}>
+            Send a message to all users — it will appear as a notification when they next open the app.
+          </div>
+          <div style={{ ...S.metricCard }}>
+            <label style={S.label}>Message</label>
+            <textarea rows={4} style={{ ...S.input, resize:"none", marginBottom:12 }}
+              placeholder="e.g. New feature: Grocery List is now available! Check your Meal Plan tab."
+              value={broadcastMsg} onChange={e => setBroadcastMsg(e.target.value)} />
+            <button onClick={sendBroadcast} disabled={!broadcastMsg.trim()||broadcasting}
+              style={{ ...S.btn, width:"auto", padding:"10px 24px",
+                opacity:!broadcastMsg.trim()||broadcasting?0.5:1 }}>
+              {broadcasting ? "Sending…" : "📢 Send to All Users"}
+            </button>
+          </div>
+          <BroadcastHistory COLORS={COLORS} FONTS={FONTS} S={S} />
+        </div>
+      )}
+    </div>
+  );
+}
+// ── AdminCompetitions — create & manage challenges ────────────────────────────
+
+// ── AdminCompetitions ──
+
+function AdminCompetitions({ allUsers, currentUserId, COLORS, S, FONTS, notify }) {
+  const [competitions, setCompetitions] = useState([]);
+  const [showCreate, setShowCreate] = useState(false);
+  const [form, setForm] = useState({ name:"", description:"", startDate:"", endDate:"", participants:[] });
+  const [loading, setLoading] = useState(false);
+  const [expandedComp, setExpandedComp] = useState(null);
+  const [memberData, setMemberData] = useState({});
+
+  const today = new Date().toISOString().split("T")[0];
+
+  useEffect(() => {
+    loadCompetitions();
+  }, []);
+
+  const loadCompetitions = async () => {
+    const data = await sbGetCompetitions();
+    setCompetitions(data);
+  };
+
+  const loadMembers = async (compId) => {
+    const members = await sbGetCompetitionMembers(compId);
+    setMemberData(prev => ({ ...prev, [compId]: members }));
+  };
+
+  const toggleExpand = async (compId) => {
+    if (expandedComp === compId) { setExpandedComp(null); return; }
+    setExpandedComp(compId);
+    await loadMembers(compId);
+  };
+
+  const createCompetition = async () => {
+    if (!form.name || !form.startDate || !form.endDate || form.participants.length === 0) {
+      notify("⚠ Fill in all fields and select at least one participant");
+      return;
+    }
+    setLoading(true);
+    const { data: comp, error } = await sbCreateCompetition({
+      name: form.name,
+      description: form.description,
+      start_date: form.startDate,
+      end_date: form.endDate,
+      created_by: currentUserId,
+      status: "active",
+      created_at: new Date().toISOString(),
+    });
+    if (error || !comp) { notify("⚠ Failed to create competition"); setLoading(false); return; }
+
+    // Invite all selected participants
+    for (const userId of form.participants) {
+      const user = allUsers.find(u => u.id === userId);
+      const startW = parseFloat(user?.profile_data?.weight || user?.profile?.weight || 70);
+      await sbInviteToCompetition(comp.id, userId, startW);
+    }
+
+    notify("✓ Competition created! Invitations sent.");
+    setForm({ name:"", description:"", startDate:"", endDate:"", participants:[] });
+    setShowCreate(false);
+    loadCompetitions();
+    setLoading(false);
+  };
+
+  const toggleParticipant = (userId) => {
+    setForm(p => ({
+      ...p,
+      participants: p.participants.includes(userId)
+        ? p.participants.filter(id => id !== userId)
+        : [...p.participants, userId]
+    }));
+  };
+
+  const statusColor = (s) => s === "active" ? COLORS.success : s === "ended" ? COLORS.muted : COLORS.accent3;
+  const eligible = allUsers.filter(u => u.active && u.approved !== false && u.profile_data?.weight);
+
+  return (
+    <div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+        <div>
+          <div style={{ fontFamily:FONTS.head, fontSize:18, fontWeight:700 }}>🏆 Challenges & Competitions</div>
+          <div style={{ fontSize:12, color:COLORS.muted, marginTop:2 }}>Create weight loss challenges between users</div>
+        </div>
+        <button onClick={() => setShowCreate(s => !s)}
+          style={{ ...S.btn, width:"auto", padding:"9px 20px", fontSize:13 }}>
+          {showCreate ? "✕ Cancel" : "+ New Challenge"}
+        </button>
+      </div>
+
+      {/* Create form */}
+      {showCreate && (
+        <div style={{ ...S.metricCard, marginBottom:20, border:`1px solid ${COLORS.accent}44`,
+          background:`${COLORS.accent}06` }}>
+          <div style={{ fontFamily:FONTS.head, fontSize:14, fontWeight:700, color:COLORS.accent, marginBottom:14 }}>
+            🏁 Create New Challenge
+          </div>
+
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12 }}>
+            <div style={{ gridColumn:"1/-1" }}>
+              <label style={S.label}>Challenge Name *</label>
+              <input style={S.input} placeholder="e.g. May Weight Loss Challenge"
+                value={form.name} onChange={e => setForm(p => ({...p, name:e.target.value}))} />
+            </div>
+            <div style={{ gridColumn:"1/-1" }}>
+              <label style={S.label}>Description</label>
+              <input style={S.input} placeholder="Challenge details (optional)"
+                value={form.description} onChange={e => setForm(p => ({...p, description:e.target.value}))} />
+            </div>
+            <div>
+              <label style={S.label}>Start Date *</label>
+              <input type="date" style={S.input} min={today}
+                value={form.startDate} onChange={e => setForm(p => ({...p, startDate:e.target.value}))} />
+            </div>
+            <div>
+              <label style={S.label}>End Date *</label>
+              <input type="date" style={S.input} min={form.startDate || today}
+                value={form.endDate} onChange={e => setForm(p => ({...p, endDate:e.target.value}))} />
+            </div>
+          </div>
+
+          {/* Participant selector */}
+          <div style={{ marginBottom:14 }}>
+            <label style={S.label}>
+              Select Participants * ({form.participants.length} selected)
+            </label>
+            {eligible.length === 0 ? (
+              <div style={{ fontSize:13, color:COLORS.muted }}>No eligible users (need active users with profile)</div>
+            ) : (
+              <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                {eligible.map(u => {
+                  const selected = form.participants.includes(u.id);
+                  return (
+                    <button key={u.id} onClick={() => toggleParticipant(u.id)}
+                      style={{ padding:"8px 14px", borderRadius:10, cursor:"pointer", fontSize:13,
+                        border:`2px solid ${selected ? COLORS.accent : COLORS.border}`,
+                        background: selected ? `${COLORS.accent}18` : COLORS.card2,
+                        color: selected ? COLORS.accent : COLORS.muted, fontWeight: selected ? 700 : 400,
+                        display:"flex", alignItems:"center", gap:8 }}>
+                      <div style={{ width:28, height:28, borderRadius:"50%",
+                        background:`${COLORS.accent}22`, display:"flex", alignItems:"center",
+                        justifyContent:"center", fontSize:13, fontWeight:700, color:COLORS.accent }}>
+                        {u.name?.[0]?.toUpperCase()}
+                      </div>
+                      <div style={{ textAlign:"left" }}>
+                        <div>{u.name}</div>
+                        <div style={{ fontSize:10, opacity:0.7 }}>{u.profile_data?.weight}kg</div>
+                      </div>
+                      {selected && <span style={{ fontSize:14 }}>✓</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <button onClick={createCompetition} disabled={loading}
+            style={{ ...S.btn, opacity:loading?0.6:1 }}>
+            {loading ? "Creating…" : "🚀 Launch Challenge"}
+          </button>
+        </div>
+      )}
+
+      {/* Competitions list */}
+      {competitions.length === 0 ? (
+        <div style={{ ...S.metricCard, textAlign:"center", padding:"2.5rem" }}>
+          <div style={{ fontSize:40, marginBottom:10 }}>🏆</div>
+          <div style={{ fontWeight:700, fontSize:15, marginBottom:6 }}>No challenges yet</div>
+          <div style={{ fontSize:13, color:COLORS.muted }}>Create your first weight loss challenge above</div>
+        </div>
+      ) : (
+        <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+          {competitions.map(comp => {
+            const isExpanded = expandedComp === comp.id;
+            const members = memberData[comp.id] || [];
+            const now = new Date();
+            const end = new Date(comp.end_date);
+            const daysLeft = Math.ceil((end - now) / (1000*60*60*24));
+            const isLive = now >= new Date(comp.start_date) && now <= end;
+
+            // Leaderboard from members
+            const ranked = [...members]
+              .filter(m => m.status === "active" || m.status === "invited")
+              .map(m => {
+                const user = allUsers.find(u => u.id === m.user_id);
+                const currentW = parseFloat(user?.profile_data?.weight || m.current_weight || m.start_weight || 0);
+                const lost = +(parseFloat(m.start_weight||0) - currentW).toFixed(1);
+                return { ...m, user, currentW, lost };
+              })
+              .sort((a,b) => b.lost - a.lost);
+
+            return (
+              <div key={comp.id} style={{ ...S.metricCard, overflow:"hidden" }}>
+                {/* Header */}
+                <div style={{ display:"flex", gap:12, alignItems:"center", cursor:"pointer" }}
+                  onClick={() => toggleExpand(comp.id)}>
+                  <div style={{ width:44, height:44, borderRadius:12, flexShrink:0,
+                    background:`linear-gradient(135deg, ${COLORS.gold}22, ${COLORS.accent3}22)`,
+                    display:"flex", alignItems:"center", justifyContent:"center", fontSize:22 }}>
+                    🏆
+                  </div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontWeight:700, fontSize:15, color:COLORS.text }}>{comp.name}</div>
+                    <div style={{ fontSize:12, color:COLORS.muted, marginTop:2 }}>
+                      {new Date(comp.start_date).toLocaleDateString("en-GB",{day:"numeric",month:"short"})} → {new Date(comp.end_date).toLocaleDateString("en-GB",{day:"numeric",month:"short"})}
+                      {" · "}{members.length} participants
+                    </div>
+                  </div>
+                  <div style={{ textAlign:"right", flexShrink:0 }}>
+                    <div style={{ fontSize:11, padding:"3px 10px", borderRadius:20, fontWeight:700,
+                      background: isLive ? `${COLORS.success}18` : `${COLORS.muted}18`,
+                      color: isLive ? COLORS.success : COLORS.muted,
+                      border: `1px solid ${isLive ? COLORS.success : COLORS.muted}33` }}>
+                      {isLive ? `🟢 Live · ${daysLeft}d left` : now < new Date(comp.start_date) ? "⏳ Upcoming" : "🏁 Ended"}
+                    </div>
+                  </div>
+                  <span style={{ fontSize:18, color:COLORS.muted, transition:"transform 0.2s",
+                    transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)" }}>▾</span>
+                </div>
+
+                {/* Expanded leaderboard */}
+                {isExpanded && (
+                  <div style={{ borderTop:`1px solid ${COLORS.border}`, marginTop:12, paddingTop:12 }}>
+                    {comp.description && (
+                      <div style={{ fontSize:13, color:COLORS.muted, marginBottom:12,
+                        padding:"8px 12px", background:"rgba(255,255,255,0.03)", borderRadius:8 }}>
+                        {comp.description}
+                      </div>
+                    )}
+
+                    {ranked.length === 0 ? (
+                      <div style={{ fontSize:13, color:COLORS.muted, textAlign:"center", padding:"1rem" }}>
+                        No participants have joined yet
+                      </div>
+                    ) : (
+                      <div>
+                        <div style={{ fontSize:12, fontWeight:700, color:COLORS.muted, marginBottom:8, letterSpacing:"0.05em" }}>
+                          🏅 LEADERBOARD
+                        </div>
+                        {ranked.map((m, idx) => {
+                          const medal = idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `${idx+1}.`;
+                          const barW = ranked[0].lost > 0 ? Math.max(0, Math.round(m.lost / ranked[0].lost * 100)) : 0;
+                          return (
+                            <div key={m.user_id} style={{ display:"flex", alignItems:"center", gap:10,
+                              padding:"10px 12px", borderRadius:10, marginBottom:6,
+                              background: idx === 0 ? `${COLORS.gold}10` : "rgba(255,255,255,0.03)",
+                              border: `1px solid ${idx === 0 ? COLORS.gold+"33" : "transparent"}` }}>
+                              <div style={{ fontSize:18, minWidth:28, textAlign:"center" }}>{medal}</div>
+                              <div style={{ width:34, height:34, borderRadius:"50%", flexShrink:0,
+                                background:`${COLORS.accent}22`, display:"flex", alignItems:"center",
+                                justifyContent:"center", fontWeight:700, fontSize:14, color:COLORS.accent }}>
+                                {m.user?.name?.[0]?.toUpperCase() || "?"}
+                              </div>
+                              <div style={{ flex:1, minWidth:0 }}>
+                                <div style={{ fontWeight:600, fontSize:13, color:COLORS.text }}>
+                                  {m.user?.name || m.user_id}
+                                </div>
+                                <div style={{ height:5, background:"rgba(255,255,255,0.07)", borderRadius:3, marginTop:4 }}>
+                                  <div style={{ height:"100%", width:`${barW}%`,
+                                    background: idx===0 ? COLORS.gold : idx===1 ? "#c0c0c0" : COLORS.accent,
+                                    borderRadius:3, transition:"width 0.5s" }} />
+                                </div>
+                              </div>
+                              <div style={{ textAlign:"right", flexShrink:0 }}>
+                                <div style={{ fontWeight:700, fontSize:15,
+                                  color: m.lost > 0 ? COLORS.success : m.lost < 0 ? COLORS.warn : COLORS.muted }}>
+                                  {m.lost > 0 ? "▼" : m.lost < 0 ? "▲" : "—"} {Math.abs(m.lost)} kg
+                                </div>
+                                <div style={{ fontSize:10, color:COLORS.muted }}>
+                                  {m.status === "invited" ? "⏳ Pending" : `${m.currentW}kg now`}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── UserCompetitions — user-side competition view & leaderboard ───────────────
+
+// ── UserCompetitions ──
+
+function UserCompetitions({ userId, userName, currentWeight, userLogs, COLORS, S, FONTS, notify }) {
+  const [competitions, setCompetitions] = useState([]);
+  const [joining, setJoining] = useState(null);
+  const [expanded, setExpanded] = useState(null);
+  const [memberData, setMemberData] = useState({});
+
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadMyCompetitions();
+  }, [userId]);
+
+  const loadMyCompetitions = async () => {
+    setLoading(true);
+    // Get all competition members for this user
+    const memberSnap = await getDocs(collection(db, "competition_members"));
+    const myMemberships = memberSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .filter(m => m.user_id === userId);
+    if (!myMemberships || myMemberships.length === 0) { setCompetitions([]); setLoading(false); return; }
+
+    // Get competition details
+    const compIds = myMemberships.map(m => m.competition_id);
+    const compSnap = await getDocs(collection(db, "competitions"));
+    const comps = compSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .filter(c => compIds.includes(c.id));
+
+    // Merge membership status
+    const merged = (comps || []).map(c => ({
+      ...c,
+      myStatus: myMemberships.find(m => m.competition_id === c.id)?.status || "invited",
+      myStartWeight: myMemberships.find(m => m.competition_id === c.id)?.start_weight,
+    }));
+    setCompetitions(merged);
+    setLoading(false);
+  };
+
+  const loadLeaderboard = async (compId) => {
+    const members = await sbGetCompetitionMembers(compId);
+    // For each member, get their latest weight from users table
+    const usersSnap = await getDocs(collection(db, "users"));
+    const users = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .filter(u => members.map(m => m.user_id).includes(u.id));
+
+    const ranked = members
+      .filter(m => m.status === "active")
+      .map(m => {
+        const u = (users||[]).find(u => u.id === m.user_id);
+        const currentW = parseFloat(u?.profile_data?.weight || m.start_weight || 0);
+        const lost = +(parseFloat(m.start_weight||0) - currentW).toFixed(1);
+        const isMe = m.user_id === userId;
+        return { ...m, userName: u?.name || "User", currentW, lost, isMe };
+      })
+      .sort((a,b) => b.lost - a.lost);
+    setMemberData(prev => ({ ...prev, [compId]: ranked }));
+  };
+
+  const joinCompetition = async (compId) => {
+    setJoining(compId);
+    const startW = parseFloat(currentWeight) || 70;
+    const err = await sbJoinCompetition(compId, userId, startW);
+    if (!err) {
+      // Update starting weight with current weight
+      await sbUpdateCompWeight(compId, userId, startW);
+      notify("✓ You've joined the challenge! Your starting weight has been recorded.");
+      loadMyCompetitions();
+    } else {
+      notify("⚠ Failed to join. Please try again.");
+    }
+    setJoining(null);
+  };
+
+  const toggleExpand = async (compId) => {
+    if (expanded === compId) { setExpanded(null); return; }
+    setExpanded(compId);
+    await loadLeaderboard(compId);
+  };
+
+  const pending = competitions.filter(c => c.myStatus === "invited");
+  const active  = competitions.filter(c => c.myStatus === "active");
+
+  if (loading) {
+    return (
+      <div style={{ textAlign:"center", padding:"2rem", color:COLORS.muted, fontSize:13 }}>
+        <div style={{ fontSize:24, marginBottom:8 }}>⏳</div>
+        Loading your challenges...
+      </div>
+    );
+  }
+
+  if (competitions.length === 0) {
+    return (
+      <div style={{ ...S.metricCard, textAlign:"center", padding:"2.5rem" }}>
+        <div style={{ fontSize:48, marginBottom:12 }}>🏆</div>
+        <div style={{ fontFamily:FONTS.head, fontSize:16, fontWeight:700, marginBottom:8 }}>No challenges yet</div>
+        <div style={{ fontSize:13, color:COLORS.muted, lineHeight:1.6 }}>
+          Your admin hasn't created any challenges yet.<br/>
+          When you're invited to a weight loss challenge, it will appear here.<br/>
+          <span style={{ color:COLORS.accent, fontWeight:600 }}>Check back soon!</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginBottom:16 }}>
+      {/* Invitations banner */}
+      {pending.length > 0 && (
+        <div style={{ ...S.metricCard, marginBottom:10,
+          background:`${COLORS.accent3}0e`, border:`1px solid ${COLORS.accent3}44` }}>
+          <div style={{ fontFamily:FONTS.head, fontSize:14, fontWeight:700, color:COLORS.accent3, marginBottom:10 }}>
+            🎯 Challenge Invitations ({pending.length})
+          </div>
+          {pending.map(comp => (
+            <div key={comp.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
+              padding:"10px 12px", background:"rgba(255,255,255,0.04)", borderRadius:10, marginBottom:6 }}>
+              <div>
+                <div style={{ fontWeight:600, fontSize:14, color:COLORS.text }}>{comp.name}</div>
+                <div style={{ fontSize:12, color:COLORS.muted, marginTop:2 }}>
+                  {new Date(comp.start_date).toLocaleDateString("en-GB",{day:"numeric",month:"short"})} → {new Date(comp.end_date).toLocaleDateString("en-GB",{day:"numeric",month:"short"})}
+                </div>
+                {comp.description && <div style={{ fontSize:11, color:COLORS.muted, marginTop:2 }}>{comp.description}</div>}
+              </div>
+              <button onClick={() => joinCompetition(comp.id)} disabled={joining === comp.id}
+                style={{ ...S.btn, width:"auto", padding:"8px 18px", fontSize:13, flexShrink:0,
+                  opacity: joining === comp.id ? 0.6 : 1 }}>
+                {joining === comp.id ? "Joining…" : "🏁 Join!"}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Active challenges */}
+      {active.map(comp => {
+        const isExp = expanded === comp.id;
+        const members = memberData[comp.id] || [];
+        const me = members.find(m => m.isMe);
+        const myRank = me ? members.indexOf(me) + 1 : null;
+        const now = new Date();
+        const end = new Date(comp.end_date);
+        const daysLeft = Math.max(0, Math.ceil((end - now) / (1000*60*60*24)));
+
+        return (
+          <div key={comp.id} style={{ ...S.metricCard, marginBottom:8, overflow:"hidden" }}>
+            {/* Header */}
+            <div style={{ display:"flex", alignItems:"center", gap:10, cursor:"pointer" }}
+              onClick={() => toggleExpand(comp.id)}>
+              <div style={{ fontSize:24, flexShrink:0 }}>🏆</div>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontWeight:700, fontSize:15, color:COLORS.text }}>{comp.name}</div>
+                <div style={{ fontSize:12, color:COLORS.muted, marginTop:1 }}>
+                  {daysLeft > 0 ? `${daysLeft} days remaining` : "Challenge ended"}
+                  {myRank && ` · You're ranked #${myRank}`}
+                </div>
+              </div>
+              {me && (
+                <div style={{ textAlign:"right", flexShrink:0 }}>
+                  <div style={{ fontWeight:800, fontSize:16,
+                    color: me.lost > 0 ? COLORS.success : COLORS.muted }}>
+                    {me.lost > 0 ? "▼" : "—"} {Math.abs(me.lost)} kg
+                  </div>
+                  <div style={{ fontSize:10, color:COLORS.muted }}>your loss</div>
+                </div>
+              )}
+              <span style={{ fontSize:16, color:COLORS.muted, transition:"transform 0.2s",
+                transform: isExp ? "rotate(180deg)" : "rotate(0deg)" }}>▾</span>
+            </div>
+
+            {/* Leaderboard */}
+            {isExp && (
+              <div style={{ borderTop:`1px solid ${COLORS.border}`, marginTop:12, paddingTop:12 }}>
+                {members.length === 0 ? (
+                  <div style={{ fontSize:13, color:COLORS.muted, textAlign:"center", padding:"0.5rem" }}>
+                    Loading leaderboard…
+                  </div>
+                ) : (
+                  <div>
+                    <div style={{ fontSize:12, fontWeight:700, color:COLORS.muted, marginBottom:8, letterSpacing:"0.05em" }}>
+                      🏅 LEADERBOARD — {members.length} participants
+                    </div>
+                    {members.map((m, idx) => {
+                      const medal = idx===0?"🥇":idx===1?"🥈":idx===2?"🥉":`${idx+1}`;
+                      const barW = members[0]?.lost > 0 ? Math.max(0, Math.round(m.lost / members[0].lost * 100)) : 0;
+                      return (
+                        <div key={m.user_id} style={{ display:"flex", alignItems:"center", gap:10,
+                          padding:"10px 12px", borderRadius:10, marginBottom:5,
+                          background: m.isMe
+                            ? `${COLORS.accent}10`
+                            : idx===0 ? `${COLORS.gold}10` : "rgba(255,255,255,0.03)",
+                          border:`1.5px solid ${m.isMe ? COLORS.accent+"55" : idx===0 ? COLORS.gold+"33" : "transparent"}` }}>
+                          <div style={{ fontSize:m.isMe?16:14, minWidth:28, textAlign:"center", fontWeight:700 }}>{medal}</div>
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                              <span style={{ fontWeight: m.isMe ? 700 : 500, fontSize:13,
+                                color: m.isMe ? COLORS.accent : COLORS.text }}>
+                                {m.userName}
+                              </span>
+                              {m.isMe && <span style={{ fontSize:9, padding:"1px 6px", borderRadius:8,
+                                background:`${COLORS.accent}22`, color:COLORS.accent, fontWeight:700 }}>YOU</span>}
+                            </div>
+                            <div style={{ height:4, background:"rgba(255,255,255,0.07)", borderRadius:2, marginTop:4 }}>
+                              <div style={{ height:"100%", width:`${barW}%`,
+                                background: m.isMe ? COLORS.accent : idx===0 ? COLORS.gold : idx===1 ? "#94a3b8" : COLORS.accent3,
+                                borderRadius:2 }} />
+                            </div>
+                          </div>
+                          <div style={{ textAlign:"right", flexShrink:0 }}>
+                            <div style={{ fontWeight:700, fontSize:14,
+                              color: m.lost > 0 ? COLORS.success : m.lost < 0 ? COLORS.warn : COLORS.muted }}>
+                              {m.lost > 0 ? "▼" : m.lost < 0 ? "▲" : "—"} {Math.abs(m.lost)} kg
+                            </div>
+                            <div style={{ fontSize:10, color:COLORS.muted }}>{m.currentW} kg now</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+
+
+
+
+
+
+// ── StepCounter — device pedometer / motion sensor step detection ─────────────
+
+// ── UserCard ──
+
+function UserCard({ u, deleteUser, enableUser, approveUser, rejectUser, changeUserPassword, COLORS, S, FONTS, allFoodLogs }) {
+  const [expanded, setExpanded] = useState(false);
+  const [activeTab, setActiveTab] = useState("account");
+  const [editPass, setEditPass] = useState(false);
+  const [newPass, setNewPass] = useState("");
+  const [showPass, setShowPass] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const p = u.profile_data || {};
+  const d = u.device_info || {};
+
+  // Compute health metrics from profile
+  const metrics = p.weight && p.height && p.age && p.gender ? (() => {
+    const w = parseFloat(p.weight), h = parseFloat(p.height), age = parseInt(p.age);
+    const g = p.gender;
+    const bmi = +(w / ((h/100)**2)).toFixed(1);
+    const bf = +(1.20*bmi + 0.23*age - 10.8*(g==="Male"?1:0) - 5.4).toFixed(1);
+    const bmr = g==="Male" ? +(10*w+6.25*h-5*age+5).toFixed(0) : +(10*w+6.25*h-5*age-161).toFixed(0);
+    const lbm = w*(1-bf/100);
+    const bmiCat = bmi<18.5?"Underweight":bmi<25?"Normal":bmi<30?"Overweight":"Obese";
+    const bmiColor = bmi<18.5?"#4f8ef7":bmi<25?"#00d4aa":bmi<30?"#f7934f":"#f7504f";
+    const healthyBF = g==="Male"?18:25;
+    const bfPenalty = bf>healthyBF ? Math.round((bf-healthyBF)/5*1.5) : 0;
+    // Visceral fat: BF%-threshold + age proxy (Gallagher 2000 + Bergman 2011)
+    const vfThreshold = g === "Female" ? 30 : 20;
+    const vfExcess = Math.max(0, bf - vfThreshold);
+    const vfAge = Math.max(0, age - 20) * 0.12;
+    const vf = +(Math.min(15, Math.max(1, 1 + vfExcess * 0.35 + vfAge)).toFixed(1));
+    const vfPenalty = vf>9 ? Math.round((vf-9)*0.8) : 0;
+    const refBMR = (a) => g==="Male" ? 10*w+6.25*h-5*a+5 : 10*w+6.25*h-5*a-161;
+    let metaAge=age, minD=Infinity;
+    for(let a=10;a<=90;a++){const dd=Math.abs(bmr-refBMR(a));if(dd<minD){minD=dd;metaAge=a;}}
+    metaAge = Math.max(10,Math.min(90,metaAge+bfPenalty+vfPenalty));
+    // Watson (1980) body water formula
+    const bw = g==="Male"
+      ? +(2.447 - 0.09156*age + 0.1074*h + 0.3362*w).toFixed(1)
+      : +(-2.097 + 0.1069*h + 0.2466*w).toFixed(1);
+    return {
+      bmi, bmiCat, bmiColor, bf, bmr,
+      muscleMass: +(lbm*0.50).toFixed(1),        // Janssen 2000: 50% of LBM
+      fatFree: +lbm.toFixed(1),
+      bodyWater: bw,                               // Watson 1980
+      boneMass: +(lbm*0.058).toFixed(1),           // Heymsfield: 5.8% of LBM
+      visceralFat: vf,
+      protein: +(w*1.6).toFixed(1),
+      metabolicAge: metaAge,
+      dailyWater: +((w*0.033)+(p.fitnessLevel==="Active"?0.75:p.fitnessLevel==="Moderate"?0.5:0.25)).toFixed(1),
+    };
+  })() : null;
+
+  return (
+    <div style={{ background: COLORS.card2, borderRadius: 12, padding: "14px 16px", border: `1px solid rgba(255,255,255,0.08)` }}>
+      {/* Header */}
+      <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+        <div style={{ width: 44, height: 44, borderRadius: "50%", background: `${COLORS.accent}22`, display: "flex", alignItems: "center", justifyContent: "center", color: COLORS.accent, fontWeight: 700, fontSize: 18, flexShrink: 0 }}>
+          {(u.name||"U")[0].toUpperCase()}
+        </div>
+        <div style={{ flex: 1, minWidth: 140 }}>
+          <div style={{ fontWeight: 600, fontSize: 15, color: COLORS.text }}>{u.name}</div>
+          <div style={{ fontSize: 12, color: COLORS.muted }}>@{u.username} · {u.country||"—"}{u.state ? `, ${u.state}` : ""} · Joined {u.created_at?.split("T")[0]}</div>
+          <div style={{ display:"flex", gap:8, marginTop:4, flexWrap:"wrap" }}>
+            {u.lastSeen && <span style={{ fontSize:11, color:(Date.now()-new Date(u.lastSeen).getTime())<86400000?COLORS.success:COLORS.muted }}>🕐 {(Date.now()-new Date(u.lastSeen).getTime())<3600000?Math.floor((Date.now()-new Date(u.lastSeen).getTime())/60000)+"m ago":(Date.now()-new Date(u.lastSeen).getTime())<86400000?Math.floor((Date.now()-new Date(u.lastSeen).getTime())/3600000)+"h ago":Math.floor((Date.now()-new Date(u.lastSeen).getTime())/86400000)+"d ago"}</span>}
+            {u.profile_data?.savedMealPlan?<span style={{fontSize:11,color:COLORS.success}}>✅ Meal plan</span>:<span style={{fontSize:11,color:COLORS.accent3}}>⚠️ No meal plan</span>}
+            {u.profile_data?.targetWeight&&u.profile_data?.weight&&<span style={{fontSize:11,color:COLORS.accent2}}>🎯 {Math.abs((+u.profile_data.weight-+u.profile_data.targetWeight).toFixed(1))}kg to goal</span>}
+          </div>
+        </div>
+        <div style={{ fontSize: 12, color: COLORS.muted }}>{p.weight ? `${p.weight}kg · ${p.age}y · ${p.gender}` : "No profile"}</div>
+        <div style={{ padding: "3px 10px", borderRadius: 20, fontSize: 12, background: u.active ? `${COLORS.success}22` : `${COLORS.warn}22`, color: u.active ? COLORS.success : COLORS.warn }}>
+          {u.active ? "Active" : "Disabled"}
+        </div>
+        <button onClick={() => setExpanded(!expanded)} style={{ background: "transparent", border: `1px solid ${COLORS.accent2}44`, borderRadius: 8, padding: "5px 12px", color: COLORS.accent2, fontSize: 12, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+          {expanded ? "▲ Hide" : "▼ Details"}
+        </button>
+        {u.active
+          ? <button style={{ background: "transparent", border: `1px solid ${COLORS.warn}`, borderRadius: 8, padding: "6px 14px", color: COLORS.warn, fontSize: 13, cursor: "pointer" }} onClick={() => deleteUser(u.id)}>Disable</button>
+          : <button style={{ background: "transparent", border: `1px solid rgba(255,255,255,0.08)`, borderRadius: 8, padding: "6px 14px", color: "#8892aa", fontSize: 13, cursor: "pointer" }} onClick={() => enableUser(u.id)}>Enable</button>
+        }
+        {confirmDelete
+          ? <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+              <span style={{ fontSize:12, color: COLORS.warn }}>Sure?</span>
+              <button onClick={() => { deleteUser(u.id); setConfirmDelete(false); }} style={{ background: COLORS.warn, border:"none", borderRadius:6, padding:"4px 10px", color:"#fff", fontSize:12, cursor:"pointer", fontWeight:600 }}>Yes, Delete</button>
+              <button onClick={() => setConfirmDelete(false)} style={{ background:"transparent", border:`1px solid ${COLORS.border}`, borderRadius:6, padding:"4px 10px", color:COLORS.muted, fontSize:12, cursor:"pointer" }}>Cancel</button>
+            </div>
+          : <button onClick={() => setConfirmDelete(true)} style={{ background:"transparent", border:`1px solid #ff444444`, borderRadius:8, padding:"6px 14px", color:"#ff4444", fontSize:13, cursor:"pointer" }}>🗑 Delete</button>
+        }
+        <button onClick={() => {
+          const pw = window.prompt(`Set new password for ${u.name||u.username}:`);
+          if (pw && pw.length >= 4) { changeUserPassword(u.id, pw); }
+          else if (pw) alert("Password must be at least 4 characters.");
+        }} style={{ background:"transparent", border:`1px solid ${COLORS.accent3}44`,
+          borderRadius:8, padding:"6px 14px", color:COLORS.accent3, fontSize:13, cursor:"pointer" }}>
+          🔑 Reset PW
+        </button>
+        {u.approved !== false && (
+          <PrintReportButton
+            currentUser={u} profile={u.profile_data||{}} metrics={null}
+            userLogs={[]} foodLogs={[]} sleepLogs={[]} calorieBurns={[]}
+            COLORS={COLORS} FONTS={{ head:"'Syne',sans-serif", body:"'Inter',sans-serif" }}
+            S={S} label="Report"
+          />
+        )}
+      </div>
+
+      {/* Expanded — tabbed view */}
+      {expanded && (
+        <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid rgba(255,255,255,0.08)` }}>
+
+          {/* Tab bar — all 15 user tabs */}
+          <div style={{ display:"flex", gap:5, marginBottom:14, overflowX:"auto",
+            paddingBottom:4, scrollbarWidth:"none", WebkitOverflowScrolling:"touch" }}>
+            {[
+              ["account",    "👤 Account"],
+              ["today",      "📅 Today"],
+              ["metrics",    "📊 Metrics"],
+              ["progress",   "📈 Progress"],
+              ["foodlog",    "🍱 Food Log"],
+              ["calorieburn","🔥 Calorie Burn"],
+              ["sleep",      "😴 Sleep"],
+              ["steps",      "👟 Steps"],
+              ["vitals",     "❤️ Vitals"],
+              ["insights",   "🤖 AI Insights"],
+              ["workout",    "💪 Workout"],
+              ["diet",       "🍽️ Meal Plan"],
+              ["challenges", "🏆 Challenges"],
+              ["foodscore",  "🥗 Food Score"],
+              ["device",     "📱 Device"],
+            ].map(([k,l]) => (
+              <button key={k} onClick={() => setActiveTab(k)}
+                style={{ padding:"5px 14px", borderRadius:20, fontSize:11, cursor:"pointer",
+                  whiteSpace:"nowrap", flexShrink:0,
+                  border: activeTab===k ? "none" : `1px solid rgba(255,255,255,0.08)`,
+                  background: activeTab===k ? `linear-gradient(135deg,${COLORS.accent},${COLORS.accent2})` : "transparent",
+                  color: activeTab===k ? "#07121f" : "#8892aa",
+                  fontWeight: activeTab===k ? 700 : 400 }}>{l}</button>
+            ))}
+          </div>
+
+          {/* ACCOUNT TAB */}
+          {activeTab === "account" && (
+            <div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 8, marginBottom: 14 }}>
+                {[["Username", u.username], ["Country", `${u.country||"—"}${u.state?` / ${u.state}`:""}`], ["Registered", u.created_at?.split("T")[0]], ["Goal", p.goal||"—"], ["Food Pref", p.foodPref||"—"], ["Fitness Level", p.fitnessLevel||"—"], ["Workout Type", p.workoutType||"—"], ["Conditions", (p.conditions||[]).join(", ")||"None"], ["Medications", p.medications||"None"]].map(([l,v]) => (
+                  <div key={l} style={{ background:"#0a0f1e", borderRadius:8, padding:"8px 12px" }}>
+                    <div style={{ fontSize:10, color:COLORS.muted, fontWeight:600, marginBottom:2 }}>{l.toUpperCase()}</div>
+                    <div style={{ fontSize:12, color:COLORS.text }}>{v}</div>
+                  </div>
+                ))}
+                <div style={{ background:"#0a0f1e", borderRadius:8, padding:"8px 12px" }}>
+                  <div style={{ fontSize:10, color:COLORS.muted, fontWeight:600, marginBottom:4 }}>PASSWORD</div>
+                  <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+                    <span style={{ fontSize:13, color:COLORS.text, fontFamily:"monospace" }}>{showPass ? u.password_hash : "••••••••"}</span>
+                    <button onClick={() => setShowPass(!showPass)} style={{ background:"transparent", border:`1px solid rgba(255,255,255,0.08)`, borderRadius:6, padding:"1px 8px", color:"#8892aa", fontSize:11, cursor:"pointer" }}>{showPass?"Hide":"Show"}</button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Schedule */}
+              {p.schedule?.length > 0 && (
+                <div style={{ marginTop:12 }}>
+                  <div style={{ fontSize:11, color:COLORS.accent, fontWeight:700, letterSpacing:1, marginBottom:8 }}>DAILY SCHEDULE</div>
+                  <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                    {p.schedule.map((s,i) => <span key={i} style={{ padding:"3px 10px", borderRadius:20, background:"#111827", border:`1px solid rgba(255,255,255,0.08)`, fontSize:12, color:"#8892aa" }}>{s.time} — {s.label}</span>)}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* HEALTH METRICS TAB */}
+          {activeTab === "metrics" && (
+            <div>
+              {metrics ? (
+                <>
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(140px,1fr))", gap:8, marginBottom:12 }}>
+                    {[
+                      ["BMI", `${metrics.bmi}`, metrics.bmiColor, metrics.bmiCat],
+                      ["Body Fat", `${metrics.bf}%`, "#f7934f", null],
+                      ["BMR", `${metrics.bmr} kcal`, "#4f8ef7", null],
+                      ["Muscle Mass", `${metrics.muscleMass} kg`, "#00d4aa", null],
+                      ["Fat-free Wt", `${metrics.fatFree} kg`, "#8892aa", null],
+                      ["Body Water", `${metrics.bodyWater} L`, "#4f8ef7", null],
+                      ["Bone Mass", `${metrics.boneMass} kg`, "#8892aa", null],
+                      ["Visceral Fat", `${metrics.visceralFat}/15`, metrics.visceralFat>10?"#f7504f":"#00d4aa", null],
+                      ["Protein Need", `${metrics.protein} g/day`, "#4f8ef7", null],
+                      ["Metabolic Age", `${metrics.metabolicAge} yrs`, metrics.metabolicAge>(parseInt(p.age)||30)?"#f7934f":"#00d4aa", null],
+                      ["Daily Water", `${metrics.dailyWater} L`, "#4f8ef7", null],
+                    ].map(([l,v,c,sub]) => (
+                      <div key={l} style={{ background:"#0a0f1e", borderRadius:8, padding:"10px 12px" }}>
+                        <div style={{ fontSize:10, color:COLORS.muted, fontWeight:600, marginBottom:4 }}>{l.toUpperCase()}</div>
+                        <div style={{ fontSize:18, fontWeight:700, color:c }}>{v}</div>
+                        {sub && <div style={{ fontSize:11, color:c, marginTop:2 }}>{sub}</div>}
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ background:`${COLORS.accent}0d`, borderRadius:8, padding:"10px 14px", fontSize:12, color:COLORS.muted }}>
+                    Based on: <b style={{ color:COLORS.text }}>{p.weight}kg · {p.height}cm · {p.age}y · {p.gender}</b>
+                    {p.targetWeight && <> · Target: <b style={{ color:COLORS.accent }}>{p.targetWeight}kg</b></>}
+                  </div>
+                </>
+              ) : (
+                <div style={{ textAlign:"center", padding:"2rem", color:COLORS.muted, fontSize:14 }}>User hasn't completed their health profile yet.</div>
+              )}
+            </div>
+          )}
+
+          {/* DIET PLAN TAB */}
+          {activeTab === "diet" && (
+            <AdminDietPlan p={p} metrics={metrics} u={u} COLORS={COLORS}
+              onPlanSaved={async (plan) => {
+                const updatedProfile = { ...p, savedMealPlan: plan };
+                await updateDoc(doc(db, "users", String(u.id)), { profile_data: updatedProfile });
+              }}
+            />
+          )}
+
+
+          {/* TODAY'S PLAN TAB */}
+          {activeTab === "today" && (() => {
+            const schedule = p.schedule || [];
+            // smart times helper inline
+            const toMinI = (t) => { if (!t) return null; const [h, m] = t.split(":").map(Number); return h * 60 + m; };
+            const toTimeI = (mins) => { const h = Math.floor(((mins % 1440) + 1440) % 1440 / 60); const mm = ((mins % 1440) + 1440) % 1440 % 60; return `${String(h).padStart(2,"0")}:${String(mm).padStart(2,"0")}`; };
+            const find = (kws) => schedule.find(s => kws.some(k => s.label.toLowerCase().includes(k)));
+            const wakeMin = toMinI(find(["wake","morning"])?.time) ?? 360;
+            const sleepMin = toMinI(find(["sleep","bed"])?.time) ?? 1380;
+            const gymMin = toMinI(find(["gym","workout","yoga"])?.time);
+            const officeMin = toMinI(find(["office","work","college"])?.time) ?? 540;
+            let bfMin = wakeMin + 40;
+            if (gymMin && gymMin < officeMin) bfMin = gymMin + 30;
+            const lunchMin = toMinI(find(["lunch break","lunch"])?.time) ?? bfMin + 270;
+            const snackMin = lunchMin + 165;
+            const dinnerMin = Math.max(1140, sleepMin - 120);
+
+            const smartTimes = {
+              breakfast: toTimeI(bfMin), lunch: toTimeI(lunchMin),
+              eveningSnack: toTimeI(snackMin), dinner: toTimeI(dinnerMin),
+              preWorkout: gymMin ? toTimeI(gymMin - 30) : null,
+              wakeTime: find(["wake"])?.time || toTimeI(wakeMin),
+              sleepTime: find(["sleep"])?.time || toTimeI(sleepMin),
+            };
+            const dailyWater = +((parseFloat(p.weight)||70)*0.033 + (p.fitnessLevel==="Active"?0.75:p.fitnessLevel==="Moderate"?0.5:0.25)).toFixed(1);
+            const likedFoods = p.likedFoods || {};
+            const conditions = p.conditions || [];
+
+            // Build timeline
+            const items = [];
+            schedule.forEach(s => {
+              const lbl = s.label.toLowerCase();
+              let suggestion = "Stay active & hydrated";
+              if (lbl.includes("wake")) suggestion = "1 glass warm water + stretch";
+              else if (lbl.includes("gym")||lbl.includes("workout")) suggestion = "Pre-workout: water + light snack 30min before";
+              else if (lbl.includes("office")||lbl.includes("work")) suggestion = "Carry a 1L water bottle to desk";
+              else if (lbl.includes("sleep")||lbl.includes("bed")) suggestion = "Avoid screens, have turmeric milk";
+              items.push({ time: s.time, activity: s.label, suggestion, type: "schedule" });
+            });
+            [
+              { time: smartTimes.breakfast, activity: "Breakfast", suggestion: (likedFoods.Breakfast||[]).slice(0,2).join(" + ")||"Healthy breakfast", type: "meal" },
+              { time: smartTimes.lunch, activity: "Lunch", suggestion: (likedFoods.Lunch||[]).slice(0,2).join(" + ")||"Balanced lunch", type: "meal" },
+              { time: smartTimes.eveningSnack, activity: "Evening Snack", suggestion: (likedFoods["Evening Snack"]||[]).slice(0,2).join(" + ")||"Light snack", type: "meal" },
+              { time: smartTimes.dinner, activity: "Dinner", suggestion: (likedFoods.Dinner||[]).slice(0,2).join(" + ")||"Light dinner", type: "meal" },
+              ...(smartTimes.preWorkout ? [{ time: smartTimes.preWorkout, activity: "Pre-Workout Fuel", suggestion: "Banana or black coffee", type: "meal" }] : []),
+            ].forEach(m => { if (!items.find(i => i.time === m.time)) items.push(m); });
+            items.sort((a,b) => a.time.localeCompare(b.time));
+
+            return (
+              <div>
+                {/* Medical food adjustments */}
+                {conditions.filter(c => MEDICAL_FOOD_ADJUSTMENTS[c]).length > 0 && (
+                  <div style={{ background:"#2a1500", border:"1px solid #f7934f55", borderRadius:10, padding:"12px 16px", marginBottom:14 }}>
+                    <div style={{ fontWeight:700, fontSize:13, color:"#f7934f", marginBottom:8 }}>⚕️ Dietary Adjustments</div>
+                    {conditions.filter(c => MEDICAL_FOOD_ADJUSTMENTS[c]).map(c => (
+                      <div key={c} style={{ marginBottom:6, fontSize:12 }}>
+                        <span style={{ fontWeight:600, color:"#f7934f" }}>{c}: </span>
+                        <span style={{ color:"#00d4aa" }}>Prefer — {MEDICAL_FOOD_ADJUSTMENTS[c].prefer.slice(0,4).join(", ")}</span>
+                        <span style={{ color:"#8892aa" }}> · Avoid — {MEDICAL_FOOD_ADJUSTMENTS[c].avoid.slice(0,4).join(", ")}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {/* Smart meal schedule */}
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(110px,1fr))", gap:8, marginBottom:14 }}>
+                  {[
+                    { label:"Breakfast", time:smartTimes.breakfast, icon:"🌅" },
+                    { label:"Lunch", time:smartTimes.lunch, icon:"☀️" },
+                    { label:"Snack", time:smartTimes.eveningSnack, icon:"🍎" },
+                    { label:"Dinner", time:smartTimes.dinner, icon:"🌙" },
+                    { label:"Water", time:`${dailyWater}L`, icon:"💧" },
+                    ...(smartTimes.preWorkout ? [{ label:"Pre-Workout", time:smartTimes.preWorkout, icon:"💪" }] : []),
+                  ].map(({ label, time, icon }) => (
+                    <div key={label} style={{ background:"#0a0f1e", borderRadius:10, padding:"10px 12px", textAlign:"center" }}>
+                      <div style={{ fontSize:18, marginBottom:4 }}>{icon}</div>
+                      <div style={{ fontSize:10, color:"#8892aa", marginBottom:2 }}>{label.toUpperCase()}</div>
+                      <div style={{ fontSize:15, fontWeight:700, color:"#4f8ef7" }}>{time}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ fontWeight:700, fontSize:14, marginBottom:10, color:"#f0f4ff" }}>Hour-by-Hour Timeline</div>
+                <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                  {items.map((item, i) => (
+                    <div key={i} style={{ background:"#0a0f1e", borderRadius:8, padding:"10px 12px", display:"flex", gap:12, alignItems:"flex-start", borderLeft:`3px solid ${item.type==="water"?"#4f8ef7":item.type==="meal"?"#00d4aa":"rgba(255,255,255,0.08)"}` }}>
+                      <div style={{ minWidth:48, fontSize:12, fontWeight:700, color:item.type==="meal"?"#00d4aa":"#8892aa" }}>{item.time}</div>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontSize:13, fontWeight:600, color:"#f0f4ff" }}>{item.activity}</div>
+                        <div style={{ fontSize:11, color:"#8892aa" }}>{item.suggestion}</div>
+                      </div>
+                      <div style={{ fontSize:14 }}>{item.type==="water"?"💧":item.type==="meal"?"🍽️":"📍"}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* PROGRESS TAB */}
+          {activeTab === "progress" && (() => {
+            // UserCard doesn't have logs; show a prompt
+            return (
+              <div>
+                {metrics ? (
+                  <>
+                    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))", gap:8, marginBottom:14 }}>
+                      {[
+                        ["BMI", `${metrics.bmi}`, metrics.bmiColor, metrics.bmiCat],
+                        ["Body Fat", `${metrics.bf}%`, "#f7934f", null],
+                        ["Muscle Mass", `${metrics.muscleMass} kg`, "#00d4aa", null],
+                        ["Visceral Fat", `${metrics.visceralFat}/15`, metrics.visceralFat>10?"#f7504f":"#00d4aa", null],
+                        ["Metabolic Age", `${metrics.metabolicAge} yrs`, metrics.metabolicAge>(parseInt(p.age)||30)?"#f7934f":"#00d4aa", null],
+                        ["Daily Water", `${metrics.dailyWater} L`, "#4f8ef7", null],
+                      ].map(([l,v,c,sub]) => (
+                        <div key={l} style={{ background:"#0a0f1e", borderRadius:8, padding:"10px 12px" }}>
+                          <div style={{ fontSize:10, color:"#8892aa", fontWeight:600, marginBottom:4 }}>{l.toUpperCase()}</div>
+                          <div style={{ fontSize:18, fontWeight:700, color:c }}>{v}</div>
+                          {sub && <div style={{ fontSize:11, color:c, marginTop:2 }}>{sub}</div>}
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ background:"#0a0f1e", borderRadius:10, padding:"12px 16px" }}>
+                      <div style={{ fontSize:12, color:"#8892aa" }}>
+                        Profile: <b style={{ color:"#f0f4ff" }}>{p.weight}kg · {p.height}cm · {p.age}y · {p.gender}</b>
+                        {p.targetWeight && <> · Target: <b style={{ color:"#00d4aa" }}>{p.targetWeight}kg</b></>}
+                        <br/>
+                        Goal: <b style={{ color:"#f0f4ff" }}>{p.goal||"—"}</b> · Conditions: <b style={{ color:p.conditions?.length?"#f7934f":"#8892aa" }}>{(p.conditions||[]).join(", ")||"None"}</b>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ textAlign:"center", padding:"2rem", color:"#8892aa", fontSize:14 }}>User hasn't completed health profile yet.</div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* WORKOUT TAB */}
+          {activeTab === "workout" && (() => {
+            const level = p.fitnessLevel || "Beginner";
+            const wType = p.workoutType || "Home";
+            const freq = p.workoutFrequency || "3x per week";
+            const freqNum = parseInt(freq) || 3;
+            const conditions = p.conditions || [];
+            const medLimit = getMedicalIntensityLimit(conditions);
+            const effectiveLevel = medLimit || level;
+            const dur = effectiveLevel === "Beginner" ? 45 : effectiveLevel === "Moderate" ? 60 : 75;
+            const warnings = getMedicalWorkoutWarnings(conditions);
+
+            // Simple split label for display
+            const HOME_LABELS = { 1:"Full Body", 2:"Upper / Lower", 3:"Push / Pull / Legs", 4:"4-day Split", 5:"5-day Split", 6:"6-day Split" };
+            const GYM_LABELS  = { 1:"Full Body", 2:"Upper / Lower", 3:"Push / Pull / Legs", 4:"4-day PPL+Legs", 5:"5-day Bro Split", 6:"6-day Bro Split" };
+            const splitLabel = wType === "Gym" ? (GYM_LABELS[Math.min(freqNum,6)]||"3-day split") : (HOME_LABELS[Math.min(freqNum,6)]||"3-day split");
+
+            const SAMPLE_HOME = {
+              Beginner: ["Push-ups 3×12","Bodyweight Squats 3×15","Glute Bridge 3×15","Plank 3×30s","Superman 3×10","Calf Raise 3×15"],
+              Moderate: ["Push-ups 4×15","Jump Squat 3×12","Inverted Row 3×10","Lunge 3×12 each","Pike Push-up 3×10","Mountain Climbers 3×20"],
+              Active: ["Diamond Push-ups 4×15","Bulgarian Split Squat 3×12","Pull-ups 4×8","Jump Lunge 3×12","Dips 3×15","Hollow Body Hold 3×30s"],
+            };
+            const SAMPLE_GYM = {
+              Beginner: ["Leg Press 3×12","Chest Press Machine 3×12","Lat Pulldown 3×12","Dumbbell Curl 3×12","Tricep Pushdown 3×12","Plank 3×30s"],
+              Moderate: ["Barbell Squat 4×8","Bench Press 4×8","Barbell Row 4×8","Overhead Press 3×10","Dumbbell Curl 3×12","Cable Crunch 3×15"],
+              Active: ["Deadlift 4×6","Incline Bench 4×8","Weighted Pull-ups 3×8","Romanian Deadlift 3×10","Barbell Curl 3×12","Face Pull 3×15"],
+            };
+            const SAMPLE_OUTDOOR = {
+              Beginner: ["20 min brisk walk","Push-ups 3×12","Bodyweight Squats 3×15","Calf Raise 3×15","Park Bench Dips 3×10"],
+              Moderate: ["25 min jog","Push-ups 4×15","Park Pull-ups 3×8","Jump Squat 3×12","Lunge 3×12 each"],
+              Active: ["30 min run","Sprint Intervals 6×100m","Push-ups 4×20","Pull-ups 4×10","Plyometric Jumps 3×10"],
+            };
+            const sampleMap = wType==="Gym"?SAMPLE_GYM:wType==="Home"?SAMPLE_HOME:SAMPLE_OUTDOOR;
+            const exercises = filterExercisesForMedical(sampleMap[effectiveLevel]||sampleMap["Beginner"], conditions);
+
+            return (
+              <div>
+                {/* Medical warnings */}
+                {warnings.length > 0 && (
+                  <div style={{ background:"#1a0a1a", border:"1px solid #f7504f55", borderRadius:10, padding:"12px 16px", marginBottom:14 }}>
+                    <div style={{ fontWeight:700, fontSize:13, color:"#f7504f", marginBottom:8 }}>⚠️ Workout Adjustments</div>
+                    {warnings.map(({ condition, warning }) => (
+                      <div key={condition} style={{ marginBottom:5, fontSize:12 }}>
+                        <span style={{ fontWeight:600, color:"#f7934f" }}>{condition}: </span>
+                        <span style={{ color:"#f0f4ff" }}>{warning}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {/* Home tip */}
+                {wType === "Home" && (
+                  <div style={{ background:"#001a12", border:"1px solid #00d4aa44", borderRadius:10, padding:"12px 16px", marginBottom:14 }}>
+                    <div style={{ fontWeight:700, fontSize:13, color:"#00d4aa", marginBottom:6 }}>🏠 Home Workout (No Equipment)</div>
+                    <div style={{ fontSize:12, color:"#f0f4ff", lineHeight:1.6 }}>
+                      Bodyweight training — no gym needed. Use chair for dips, wall for support, floor mat for ground exercises.
+                    </div>
+                  </div>
+                )}
+                {/* Stats */}
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))", gap:8, marginBottom:14 }}>
+                  {[
+                    ["Type", wType, "#00d4aa"],
+                    ["Level", effectiveLevel, "#4f8ef7"],
+                    ["Split", splitLabel, "#f7934f"],
+                    ["Duration", `${dur} min`, "#00d4aa"],
+                    ["Frequency", freq, "#4f8ef7"],
+                    ["Cal Burn", `~${dur*(effectiveLevel==="Beginner"?5:effectiveLevel==="Moderate"?7:9)} kcal`, "#f7934f"],
+                  ].map(([l,v,c]) => (
+                    <div key={l} style={{ background:"#0a0f1e", borderRadius:8, padding:"8px 12px" }}>
+                      <div style={{ fontSize:10, color:"#8892aa", fontWeight:600, marginBottom:3 }}>{l.toUpperCase()}</div>
+                      <div style={{ fontSize:14, fontWeight:700, color:c }}>{v}</div>
+                    </div>
+                  ))}
+                </div>
+                {/* Sample exercises */}
+                <div style={{ fontWeight:700, fontSize:14, color:"#f0f4ff", marginBottom:10 }}>Sample Exercises ({effectiveLevel})</div>
+                <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                  {exercises.map((ex, i) => (
+                    <div key={i} style={{ display:"flex", gap:10, alignItems:"center", background:"#0a0f1e", borderRadius:8, padding:"8px 12px" }}>
+                      <div style={{ width:22, height:22, borderRadius:"50%", background:"#00d4aa22", display:"flex", alignItems:"center", justifyContent:"center", color:"#00d4aa", fontWeight:700, fontSize:11, flexShrink:0 }}>{i+1}</div>
+                      <div style={{ fontSize:13, color:"#f0f4ff" }}>{ex}</div>
+                    </div>
+                  ))}
+                </div>
+                {medLimit && (
+                  <div style={{ background:"#2a1500", borderRadius:8, padding:"10px 14px", marginTop:12, fontSize:12, color:"#f7934f" }}>
+                    ⚕️ Intensity limited to <b>{medLimit}</b> due to medical conditions. Consult your doctor before increasing intensity.
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+          {/* FOOD SCORE TAB — Admin view */}
+          {activeTab === "foodscore" && (() => {
+            const likedFoods = p.likedFoods || {};
+            const allEntries = [];
+            const mealLabels = { Breakfast:"🌅 Breakfast", Lunch:"☀️ Lunch", "Evening Snack":"🍎 Snack", Dinner:"🌙 Dinner", Munching:"🥜 Munching", Fruits:"🍉 Fruits" };
+            Object.entries(likedFoods).forEach(([meal, foods]) => {
+              (foods || []).forEach(food => {
+                const health = getFoodHealth(food);
+                allEntries.push({ food, meal, mealLabel: mealLabels[meal] || meal, ...health });
+              });
+            });
+
+            if (allEntries.length === 0) {
+              return <div style={{ textAlign:"center", padding:"2rem", color:"#8892aa", fontSize:14 }}>User hasn't selected food preferences yet.</div>;
+            }
+
+            const healthy   = allEntries.filter(e => e.status === "healthy");
+            const moderate  = allEntries.filter(e => e.status === "moderate");
+            const unhealthy = allEntries.filter(e => e.status === "unhealthy");
+            const avgScore  = +(allEntries.reduce((a,e) => a + e.score, 0) / allEntries.length).toFixed(1);
+            const dietGrade = avgScore >= 8 ? "A" : avgScore >= 6.5 ? "B" : avgScore >= 5 ? "C" : "D";
+            const gradeColor = avgScore >= 8 ? COLORS.success : avgScore >= 6.5 ? COLORS.accent : avgScore >= 5 ? COLORS.accent3 : COLORS.warn;
+
+            return (
+              <div>
+                {/* Grade summary */}
+                <div style={{ display:"flex", gap:14, alignItems:"center", background:`${gradeColor}0d`, border:`1px solid ${gradeColor}30`, borderRadius:10, padding:"12px 16px", marginBottom:14, flexWrap:"wrap" }}>
+                  <div style={{ textAlign:"center" }}>
+                    <div style={{ fontSize:44, fontWeight:800, color:gradeColor, lineHeight:1 }}>{dietGrade}</div>
+                    <div style={{ fontSize:10, color:"#8892aa", fontWeight:600 }}>DIET GRADE</div>
+                  </div>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontWeight:700, fontSize:14, color:gradeColor, marginBottom:4 }}>
+                      {avgScore >= 8 ? "Excellent food choices!" : avgScore >= 6.5 ? "Good diet, some improvements possible." : avgScore >= 5 ? "Average diet — several items need replacing." : "Diet needs significant improvement."}
+                    </div>
+                    <div style={{ fontSize:12, color:"#8892aa" }}>Avg score: <b style={{ color:gradeColor }}>{avgScore}/10</b> · {allEntries.length} foods · {unhealthy.length} unhealthy</div>
+                    <div style={{ marginTop:6, height:5, background:"rgba(255,255,255,0.07)", borderRadius:3 }}>
+                      <div style={{ height:"100%", width:`${(avgScore/10)*100}%`, background:gradeColor, borderRadius:3 }} />
+                    </div>
+                  </div>
+                  <div style={{ display:"flex", gap:8 }}>
+                    {[{l:"✅",c:healthy.length,col:COLORS.success},{l:"⚡",c:moderate.length,col:COLORS.accent3},{l:"⚠️",c:unhealthy.length,col:COLORS.warn}].map(({l,c,col}) => (
+                      <div key={l} style={{ textAlign:"center", background:`${col}15`, borderRadius:8, padding:"6px 12px" }}>
+                        <div style={{ fontSize:16, fontWeight:700, color:col }}>{c}</div>
+                        <div style={{ fontSize:9, color:"#8892aa" }}>{l}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Table */}
+                <div style={{ background:"#0a0f1e", borderRadius:10, overflow:"hidden", border:"1px solid rgba(255,255,255,0.07)" }}>
+                  {/* Header */}
+                  <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr 3fr", gap:0, padding:"8px 14px", background:"rgba(255,255,255,0.04)", borderBottom:"1px solid rgba(255,255,255,0.07)" }}>
+                    {["FOOD ITEM","MEAL","STATUS","SUGGESTION"].map(h => (
+                      <div key={h} style={{ fontSize:9, fontWeight:700, color:"#8892aa", letterSpacing:0.8 }}>{h}</div>
+                    ))}
+                  </div>
+                  {/* Rows */}
+                  {allEntries.map((entry, i) => {
+                    const sc = entry.status === "healthy" ? COLORS.success : entry.status === "moderate" ? COLORS.accent3 : COLORS.warn;
+                    const icon = entry.status === "healthy" ? "✅" : entry.status === "moderate" ? "⚡" : "⚠️";
+                    const lbl = entry.status === "healthy" ? "Healthy" : entry.status === "moderate" ? "Moderate" : "Unhealthy";
+                    return (
+                      <div key={i} style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr 3fr", gap:0, padding:"10px 14px", borderBottom: i < allEntries.length-1 ? "1px solid rgba(255,255,255,0.05)" : "none", background: i%2===0 ? "transparent" : "rgba(255,255,255,0.01)", alignItems:"start" }}>
+                        <div>
+                          <div style={{ fontWeight:600, fontSize:13, color:"#f0f4ff", marginBottom:2 }}>{entry.food}</div>
+                          <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                            <div style={{ height:3, width:50, background:"rgba(255,255,255,0.07)", borderRadius:2 }}>
+                              <div style={{ height:"100%", width:`${entry.score*10}%`, background:sc, borderRadius:2 }} />
+                            </div>
+                            <span style={{ fontSize:10, color:sc, fontWeight:700 }}>{entry.score}/10</span>
+                            {entry.cal && <span style={{ fontSize:9, color:"#8892aa" }}>{entry.cal}kcal</span>}
+                          </div>
+                        </div>
+                        <div style={{ fontSize:11, color:"#8892aa", paddingTop:2 }}>{entry.mealLabel}</div>
+                        <div style={{ paddingTop:2 }}>
+                          <span style={{ display:"inline-flex", alignItems:"center", gap:3, padding:"3px 8px", borderRadius:20, fontSize:10, fontWeight:700, background:`${sc}18`, color:sc, border:`1px solid ${sc}33`, whiteSpace:"nowrap" }}>
+                            {icon} {lbl}
+                          </span>
+                        </div>
+                        <div style={{ fontSize:11, color: entry.status === "healthy" ? COLORS.success : "#8892aa" }}>
+                          {entry.status !== "healthy" ? (
+                            <span><span style={{ color:COLORS.success, fontWeight:600 }}>→ {entry.suggestion.split("(")[0].trim()}</span><br/><span style={{ fontSize:10, color:"#8892aa" }}>{entry.reason.slice(0,70)}…</span></span>
+                          ) : entry.suggestion}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {unhealthy.length > 0 && (
+                  <div style={{ marginTop:10, padding:"10px 14px", background:`${COLORS.warn}0a`, border:`1px solid ${COLORS.warn}30`, borderRadius:10, fontSize:12, color:"#8892aa" }}>
+                    ⚠️ This user has <b style={{ color:COLORS.warn }}>{unhealthy.length} unhealthy food choices</b>. Consider adjusting their AI meal plan to use healthier alternatives.
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* FOOD LOG TAB — admin view */}
+          {activeTab === "foodlog" && (() => {
+            const userFoodLogs = (allFoodLogs || []).filter(l => l.user_id === u.id);
+            const today2 = new Date().toISOString().split("T")[0];
+            const logsByDate2 = {};
+            userFoodLogs.forEach(l => {
+              if (!logsByDate2[l.logged_date]) logsByDate2[l.logged_date] = [];
+              logsByDate2[l.logged_date].push(l);
+            });
+            const dates = Object.keys(logsByDate2).sort().reverse().slice(0, 14);
+            const statusColor2 = (s) => s==="healthy"?COLORS.success:s==="moderate"?COLORS.accent3:COLORS.warn;
+
+            // Calorie target
+            const bmiA = p.weight&&p.height ? calcBMI(+p.weight,+p.height) : 22;
+            const bmrA = p.weight&&p.height&&p.age ? calcBMR(+p.weight,+p.height,+p.age,p.gender||"Male") : 1800;
+            const amA = p.fitnessLevel==="Active"?1.55:p.fitnessLevel==="Moderate"?1.375:1.2;
+            const isLoseA = (p.goal||"").toLowerCase().includes("lose");
+            const targetA = isLoseA ? Math.round(bmrA*amA) - 500 : Math.round(bmrA*amA);
+
+            if (userFoodLogs.length === 0) {
+              return (
+                <div style={{ textAlign:"center", padding:"2rem", color:"#8892aa" }}>
+                  <div style={{ fontSize:32, marginBottom:8 }}>🍱</div>
+                  <div style={{ fontSize:14, color:COLORS.text, marginBottom:4 }}>No food logged yet</div>
+                  <div style={{ fontSize:12 }}>User hasn't logged any meals.</div>
+                </div>
+              );
+            }
+
+            return (
+              <div>
+                {/* 14-day calorie overview */}
+                {dates.length > 1 && (() => {
+                  const chartData = dates.slice(0,14).reverse().map(date => {
+                    const dayLogs = (logsByDate2[date]||[]).filter(l => l.meal_type !== "Water");
+                    const total = dayLogs.reduce((s,l)=>s+(l.calories||0),0);
+                    const d = new Date(date);
+                    return { date, total, label: d.toLocaleDateString("en-GB",{day:"numeric",month:"short"}) };
+                  });
+                  return (
+                    <div style={{ background:"#0a0f1e", borderRadius:10, padding:"12px 14px", marginBottom:14 }}>
+                      <div style={{ fontSize:13, fontWeight:700, color:COLORS.text, marginBottom:10 }}>
+                        🔥 Calorie Intake (Last {chartData.length} days)
+                      </div>
+                      <CalorieBarChart data={chartData} targetCal={targetA} COLORS={COLORS} FONTS={FONTS} />
+                    </div>
+                  );
+                })()}
+
+                {/* Per-day log */}
+                {dates.map(date => {
+                  const dayLogs = logsByDate2[date] || [];
+                  const foodLogs2 = dayLogs.filter(l => l.meal_type !== "Water");
+                  const waterLogs2 = dayLogs.filter(l => l.meal_type === "Water");
+                  const totalCal = foodLogs2.reduce((s,l)=>s+(l.calories||0),0);
+                  const totalWater = waterLogs2.reduce((s,l)=>s+(l.calories||0),0);
+                  const pctA = Math.min(100, Math.round(totalCal/targetA*100));
+                  const barColA = totalCal > targetA ? COLORS.warn : totalCal >= targetA*0.85 ? COLORS.success : COLORS.accent;
+                  return (
+                    <div key={date} style={{ background:"#0a0f1e", borderRadius:10, padding:"12px 14px", marginBottom:10, border:"1px solid rgba(255,255,255,0.06)" }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                        <div style={{ fontWeight:700, fontSize:13, color:COLORS.text }}>
+                          {date === today2 ? "Today" : new Date(date).toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"})}
+                        </div>
+                        <div style={{ display:"flex", gap:10, alignItems:"center" }}>
+                          {totalWater > 0 && <span style={{ fontSize:11, color:COLORS.accent2 }}>💧 {totalWater}ml</span>}
+                          <span style={{ fontWeight:700, fontSize:14, color:barColA }}>{totalCal} kcal</span>
+                          <span style={{ fontSize:10, color:"#8892aa" }}>{pctA}% of target</span>
+                        </div>
+                      </div>
+                      <div style={{ height:4, background:"rgba(255,255,255,0.07)", borderRadius:2, marginBottom:10 }}>
+                        <div style={{ height:"100%", width:`${pctA}%`, background:barColA, borderRadius:2 }}/>
+                      </div>
+                      <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
+                        {foodLogs2.map((entry, i) => {
+                          const col = statusColor2(entry.health_status);
+                          const timeStr = entry.logged_at
+                            ? new Date(entry.logged_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:true})
+                            : "";
+                          return (
+                            <div key={i} style={{ display:"flex", alignItems:"center", gap:8, padding:"5px 8px",
+                              background:"rgba(255,255,255,0.02)", borderRadius:6, borderLeft:`2px solid ${col}` }}>
+                              {timeStr && <span style={{ fontSize:10, color:"#8892aa", minWidth:48 }}>{timeStr}</span>}
+                              <span style={{ fontSize:12, fontWeight:600, color:"#f0f4ff", flex:1 }}>{entry.food_name}</span>
+                              <span style={{ fontSize:10, color:"#8892aa" }}>{entry.quantity}</span>
+                              <span style={{ fontSize:12, fontWeight:700, color:col }}>{entry.calories} kcal</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
+          {/* DEVICE TAB */}
+          {activeTab === "device" && (
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(150px,1fr))", gap:8 }}>
+              {[["Device", d.device||"—"], ["Browser", d.browser||"—"], ["OS", d.os||"—"], ["IP Address", d.ip||"—"], ["City", d.city||"—"], ["Country (IP)", d.country||"—"], ["Last Seen", d.lastSeen ? new Date(d.lastSeen).toLocaleString() : "Never"], ["User Agent", d.userAgent ? d.userAgent.slice(0,40)+"..." : "—"]].map(([l,v]) => (
+              <div key={l} style={{ background:"#0a0f1e", borderRadius:8, padding:"8px 12px" }}>
+                <div style={{ fontSize:10, color:COLORS.muted, fontWeight:600, marginBottom:2 }}>{l.toUpperCase()}</div>
+                <div style={{ fontSize:12, color:COLORS.text, wordBreak:"break-all" }}>{v}</div>
+              </div>
+            ))}
+            </div>
+          )}
+
+          {/* ── Additional user tabs in admin ── */}
+          {activeTab === "calorieburn" && (
+            <AdminUserDataView collection="calorie_burns" userId={u.id} renderFn={(items) => (
+              <CalorieBurnTab userId={u.id} calorieBurns={items} onBurnSaved={()=>{}} COLORS={COLORS} FONTS={{ head:"'Syne',sans-serif", body:"'Inter','DM Sans',sans-serif" }} S={S} />
+            )} COLORS={COLORS} />
+          )}
+          {activeTab === "sleep" && (
+            <AdminUserDataView collection="sleep_logs" userId={u.id} renderFn={(items) => (
+              <SleepTracker userId={u.id} sleepLogs={items} onSaved={()=>{}} COLORS={COLORS} FONTS={{ head:"'Syne',sans-serif", body:"'Inter','DM Sans',sans-serif" }} S={S} />
+            )} COLORS={COLORS} />
+          )}
+          {activeTab === "steps" && (
+            <StepCounter userId={u.id} COLORS={COLORS} FONTS={{ head:"'Syne',sans-serif", body:"'Inter','DM Sans',sans-serif" }} S={S} />
+          )}
+          {activeTab === "vitals" && (
+            <HealthVitalsTab userId={u.id} COLORS={COLORS} FONTS={{ head:"'Syne',sans-serif", body:"'Inter','DM Sans',sans-serif" }} S={S} />
+          )}
+          {activeTab === "insights" && (
+            <AIHealthInsights userId={u.id}
+              userLogs={[]} foodLogs={[]} sleepLogs={[]} calorieBurns={[]}
+              profile={u.profile_data||{}}
+              COLORS={COLORS} FONTS={{ head:"'Syne',sans-serif", body:"'Inter','DM Sans',sans-serif" }} S={S} />
+          )}
+          {activeTab === "challenges" && (
+            <UserCompetitions userId={u.id} userName={u.name||u.username}
+              currentWeight={parseFloat(u.profile_data?.weight)||70} userLogs={[]}
+              COLORS={COLORS} FONTS={{ head:"'Syne',sans-serif", body:"'Inter','DM Sans',sans-serif" }} S={S} notify={()=>{}} />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── 30-day persistent session helpers ────────────────────────────────────────
+
+// ── BroadcastBanner ──
+
+function AdminFeedbackTab({ COLORS, FONTS, S }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filterType, setFilterType] = useState("all");
+
+  useEffect(() => { loadFeedback(); }, []);
+
+  const loadFeedback = async () => {
+    setLoading(true);
+    try {
+      const snap = await getDocs(collection(db, "feedback"));
+      setItems(snap.docs.map(d => ({ id:d.id, ...d.data() }))
+        .sort((a,b) => new Date(b.created_at) - new Date(a.created_at)));
+    } catch(e) {}
+    setLoading(false);
+  };
+
+  const deleteFeedback = async (id) => {
+    await deleteDoc(doc(db, "feedback", id));
+    setItems(prev => prev.filter(i => i.id !== id));
+  };
+
+  const TYPE_COLORS = {
+    suggestion: COLORS.accent2,
+    feature:    COLORS.accent,
+    bug:        COLORS.warn,
+  };
+  const TYPE_LABELS = {
+    suggestion: "💡 Suggestion",
+    feature:    "✨ Feature Request",
+    bug:        "🐛 Bug Report",
+  };
+
+  return (
+    <div>
+      <div style={{ fontFamily:FONTS.head, fontSize:18, fontWeight:700, marginBottom:4 }}>
+        💬 User Feedback
+      </div>
+      <div style={{ fontSize:13, color:COLORS.muted, marginBottom:16 }}>
+        {items.length} submission{items.length !== 1 ? "s" : ""}
+      </div>
+
+      {/* Filter tabs */}
+      <div style={{ display:"flex", gap:6, marginBottom:14, flexWrap:"wrap" }}>
+        {[["all","All"],["suggestion","💡 Suggestions"],["feature","✨ Features"],["bug","🐛 Bugs"]].map(([k,l]) => (
+          <button key={k} onClick={() => setFilterType(k)}
+            style={{ padding:"5px 14px", borderRadius:20, fontSize:12, cursor:"pointer",
+              border:`1px solid ${filterType===k?COLORS.accent:COLORS.border}`,
+              background:filterType===k?`${COLORS.accent}18`:"transparent",
+              color:filterType===k?COLORS.accent:COLORS.muted, fontWeight:filterType===k?700:400 }}>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div style={{ textAlign:"center", padding:"2rem", color:COLORS.muted }}>Loading…</div>
+      ) : items.filter(i=>filterType==="all"||i.type===filterType).length === 0 ? (
+        <div style={{ ...S.metricCard, textAlign:"center", padding:"3rem" }}>
+          <div style={{ fontSize:40, marginBottom:12 }}>💬</div>
+          <div style={{ fontFamily:FONTS.head, fontSize:16, fontWeight:700, marginBottom:8 }}>
+            No feedback yet
+          </div>
+          <div style={{ fontSize:13, color:COLORS.muted }}>
+            Users can submit feedback using the 💬 button in their dashboard
+          </div>
+        </div>
+      ) : (
+        <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+          {items.filter(i=>filterType==="all"||i.type===filterType).map(item => {
+            const col = TYPE_COLORS[item.type] || COLORS.accent;
+            return (
+              <div key={item.id} style={{ ...S.metricCard,
+                borderLeft:`4px solid ${col}` }}>
+                <div style={{ display:"flex", justifyContent:"space-between",
+                  alignItems:"flex-start", marginBottom:8 }}>
+                  <div>
+                    <span style={{ fontSize:12, fontWeight:700, color:col,
+                      padding:"2px 10px", borderRadius:20,
+                      background:`${col}18`, border:`1px solid ${col}33` }}>
+                      {TYPE_LABELS[item.type] || item.type}
+                    </span>
+                  </div>
+                  <button onClick={() => deleteFeedback(item.id)}
+                    style={{ background:"transparent", border:"none",
+                      color:`${COLORS.warn}88`, cursor:"pointer", fontSize:16,
+                      padding:"0 4px" }}>✕</button>
+                </div>
+                <div style={{ fontSize:14, color:COLORS.text, lineHeight:1.6,
+                  marginBottom:10 }}>
+                  {item.message}
+                </div>
+                <div style={{ display:"flex", gap:12, fontSize:11, color:COLORS.muted }}>
+                  <span>👤 @{item.username}</span>
+                  <span>🕐 {new Date(item.created_at).toLocaleString("en-GB",
+                    {day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function AdminUserDataView({ userId, collection: col, COLORS, FONTS, S, render, renderFn }) {
+  const [data, setData] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  React.useEffect(() => {
+    if (!userId || !col) return;
+    setLoading(true);
+    getDocs(query(collection(db, col), where("user_id","==",userId))).then(snap => {
+      setData(snap.docs.map(d=>({id:d.id,...d.data()})));
+      setLoading(false);
+    }).catch(()=>{ setLoading(false); });
+  }, [userId, col]);
+  if (loading) return <div style={{ textAlign:"center", padding:"2rem", color:"#7a88aa", fontSize:13 }}>Loading...</div>;
+  const fn = renderFn || render;
+  return fn ? fn(data) : null;
+}
+
+
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
   // STAYFIT v3.1 - Fixed FoodScore, Grocery, SW cache
@@ -9095,6 +11063,7 @@ function App() {
               <div style={{ fontSize:13, color:COLORS.muted, marginBottom:16 }}>
                 Compete with others in your weight loss journey
               </div>
+              <FriendsTab
                 currentUser={currentUser} userLogs={userLogs}
                 calorieBurns={calorieBurns} foodLogs={foodLogs}
                 COLORS={COLORS} FONTS={FONTS} S={S} notify={notify}
@@ -9323,6 +11292,7 @@ function App() {
 
 
           {/* All approved users with search */}
+          <AdminUserList
             adminUsers={adminUsers} deleteUser={deleteUser} enableUser={enableUser}
             approveUser={approveUser} rejectUser={rejectUser}
             changeUserPassword={changeUserPassword} COLORS={COLORS} S={S} FONTS={FONTS}
