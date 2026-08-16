@@ -26,6 +26,7 @@ async function callAI(prompt, maxTokens = 8000, imageBase64 = null) {
 import { resolveIsDark, getThemeColors, loadStoredTheme, saveTheme, applyCssVars, buildStyles, globalStylesCss, GlobalStyles, MeshBackground, ThemePicker } from "./components/Theme";
 import LandingPage from "./pages/LandingPage";
 import OnboardScreen from "./components/OnboardScreen";
+import BloodReportAnalysis from "./components/BloodReportAnalysis";
 import { LOGO_SRC, COLORS, FONTS, INITIAL_USERS, GOALS, FOOD_PREFS, FITNESS_LEVELS, WORKOUT_TYPES, WORKOUT_FREQUENCIES, MEDICAL_CONDITIONS, COUNTRY_STATES, COUNTRY_FOODS, DEFAULT_FOODS, HEALTHY_SWAPS, PREF_FOODS } from "./data/constants";
 function getFoodsByPref(country, foodPref, mealKey) {
   if (!foodPref) return (COUNTRY_FOODS[country] || DEFAULT_FOODS)[mealKey] || [];
@@ -10433,6 +10434,7 @@ function App() {
                 <ProgressPhotos userId={currentUser.id} COLORS={COLORS} FONTS={FONTS} S={S} />
 
                 {/* Blood Report Analysis */}
+                <BloodReportAnalysis callAI={callAI} COLORS={COLORS} FONTS={FONTS} S={S} />
 
                 {/* Share with friend inside app */}
                 <div style={{ ...S.metricCard, marginBottom:14, background:`${COLORS.accent2}08`, border:`1px solid ${COLORS.accent2}33` }}>

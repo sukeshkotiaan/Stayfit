@@ -10,7 +10,7 @@ async function callGemini(prompt, maxTokens, imageBase64) {
       ? [{ inlineData: { mimeType: "image/jpeg", data: imageBase64 } }, { text: prompt }]
       : [{ text: prompt }];
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`,
       { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ contents: [{ role: "user", parts }], generationConfig: { temperature: 0.4, maxOutputTokens: maxTokens } }) }
     );
