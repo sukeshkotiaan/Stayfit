@@ -8974,10 +8974,15 @@ function App() {
       setCurrentUser(u);
       if (u.profile?.likedFoods) setSelectedFoods(u.profile.likedFoods);
       if (u.profile?.schedule) setScheduleSlots(u.profile.schedule);
-      // onSnapshot listeners will load data automatically
-      setScreen(u.role === "admin" ? "admin" : "dashboard");
+      // Auto-redirect logged-in users away from public pages
+      if (location.pathname === "/" || location.pathname === "/login" || location.pathname === "") {
+        setScreen(u.role === "admin" ? "admin" : "dashboard");
+      }
     } else {
-      setScreen("login");
+      // Auto-redirect unauthenticated users to login, UNLESS they are on the landing page
+      if (location.pathname !== "/" && location.pathname !== "" && location.pathname !== "/landing") {
+        setScreen("login");
+      }
     }
   }, []);
 
