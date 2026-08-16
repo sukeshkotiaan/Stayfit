@@ -4,7 +4,28 @@ const LOGO_SRC = "data:image/png;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BS
 
 
 
-const COLORS = COLORS_DARK;
+const COLORS = {
+  bg: "#0a0a0a", // Deep OLED black
+  card: "#121212", // Elevated dark
+  card2: "#1a1a1a",
+  card3: "#222222",
+  border: "rgba(255,255,255,0.08)",
+  accent: "#DFFF00", // High-visibility chartreuse/neon lime
+  accent2: "#A5FF00",
+  accent3: "#FFFFFF",
+  warn: "#FF3366",
+  text: "#FFFFFF",
+  muted: "#888888",
+  success: "#DFFF00",
+  purple: "#888888", // Removed purple, mapped to neutral
+  gold: "#FFD700",
+  glass: "#121212", // Replaced glass with solid flat for premium feel
+  glassBorder: "rgba(255, 255, 255, 0.08)",
+  glassHighlight: "rgba(255, 255, 255, 0.02)",
+  mesh1: "#0a0a0a",
+  mesh2: "#0a0a0a",
+  mesh3: "#0a0a0a",
+};
 const FONTS = { head: "'Syne', sans-serif", body: "'Inter', 'DM Sans', sans-serif" };
 
 const INITIAL_USERS = [
