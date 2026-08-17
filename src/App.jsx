@@ -10860,7 +10860,7 @@ function App() {
                   style={{ ...S.btnSm, borderRadius:20, padding:"4px 14px" }}>✕</button>
               </div>
               <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10 }}>
-                {[["progress","📈","Progress"],["steps","👟","Steps"],["insights","🤖","AI Insights"],
+                {[["progress","📈","Progress"],["metrics","📊","Metrics"],["steps","👟","Steps"],["insights","🤖","AI Insights"],
                   ["workout","💪","Workout"],["challenges","🏆","Challenges"],
                   ["friends","👥","Friends"],["foodscore","🥗","Food Score"]].map(([k,ic,lb]) => (
                   <button key={k} onClick={() => { setDashTab(k); setShowMoreMenu(false); }}
