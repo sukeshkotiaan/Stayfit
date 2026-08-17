@@ -59,6 +59,10 @@ async function callOpenRouter(prompt, maxTokens) {
 }
 
 export default async function handler(req, res) {
+  if (req.method === "GET") {
+    const fetchRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_KEYS[0]}`);
+    return res.status(200).json(await fetchRes.json());
+  }
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   const { prompt, maxTokens = 8000, imageBase64 = null, fileBase64 = null, fileMimeType = "image/jpeg" } = req.body || {};
