@@ -12,12 +12,32 @@ export default function BloodReportAnalysis({ callAI, COLORS, FONTS, S }) {
   
   const fileInputRef = useRef(null);
 
+  const compressImage = (dataUrl, callback) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      let { width, height } = img;
+      const max = 1600; // allow high res for text reading, but still compress
+      if (width > max || height > max) {
+        if (width > height) { height = Math.round(height * (max / width)); width = max; }
+        else { width = Math.round(width * (max / height)); height = max; }
+      }
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, width, height);
+      callback(canvas.toDataURL("image/jpeg", 0.7)); // 70% quality jpeg
+    };
+    img.onerror = () => callback(dataUrl); // fallback
+    img.src = dataUrl;
+  };
+
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      setError("File size must be less than 5MB");
+    if (file.size > 10 * 1024 * 1024) {
+      setError("File size must be less than 10MB");
       return;
     }
 
@@ -27,12 +47,11 @@ export default function BloodReportAnalysis({ callAI, COLORS, FONTS, S }) {
       const reader = new FileReader();
       reader.onload = async (event) => {
         try {
-          // Dynamically import mammoth to keep initial bundle size small
           const mammoth = await import("mammoth/mammoth.browser");
           const arrayBuffer = event.target.result;
           const extracted = await mammoth.extractRawText({ arrayBuffer });
           setDocText(extracted.value);
-          setImagePreview("word_doc"); // flag for UI
+          setImagePreview("word_doc");
           setFileMime(file.type);
           setError("");
           setResult(null);
@@ -41,12 +60,25 @@ export default function BloodReportAnalysis({ callAI, COLORS, FONTS, S }) {
         }
       };
       reader.readAsArrayBuffer(file);
+    } else if (file.type.startsWith("image/")) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        compressImage(event.target.result, (compressedDataUrl) => {
+          setImagePreview(compressedDataUrl);
+          setDocText(null);
+          setFileMime("image/jpeg");
+          setError("");
+          setResult(null);
+        });
+      };
+      reader.readAsDataURL(file);
     } else {
+      // PDF or other
       const reader = new FileReader();
       reader.onload = (event) => {
         setImagePreview(event.target.result);
         setDocText(null);
-        setFileMime(file.type); // e.g., application/pdf or image/jpeg
+        setFileMime(file.type);
         setError("");
         setResult(null);
       };
@@ -85,18 +117,20 @@ Return ONLY valid JSON in this exact format:
       let mimeType = "image/jpeg";
       
       if (docText) {
-        // If it's a DOCX, we send the extracted text appended to the prompt
         prompt += "\n\nReport Text:\n" + docText;
       } else {
-        // If it's PDF or Image, we send the base64 data to Gemini
         base64Data = imagePreview.split(',')[1];
         mimeType = fileMime || "image/jpeg";
       }
 
       const { text } = await callAI(prompt, 1500, base64Data, mimeType);
       
-      let cleanText = text.trim().replace(/```json/g, "").replace(/```/g, "").trim();
-      const parsed = JSON.parse(cleanText);
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error("AI returned invalid data format. Please try again.");
+      }
+      
+      const parsed = JSON.parse(jsonMatch[0]);
       
       if (parsed.error) {
         throw new Error(parsed.error);
@@ -105,7 +139,7 @@ Return ONLY valid JSON in this exact format:
       setResult(parsed);
     } catch (err) {
       console.error(err);
-      setError("Failed to analyze the report. Please ensure the file is clear and try again.");
+      setError("Error: " + (err.message || "Failed to analyze the report. Ensure the file is clear."));
     } finally {
       setLoading(false);
     }
@@ -155,7 +189,7 @@ Return ONLY valid JSON in this exact format:
         >
           <div style={{ fontSize: 32, marginBottom: 8 }}>📄</div>
           <div style={{ fontSize: 14, fontWeight: 600, color: COLORS.text }}>Tap to Upload Report</div>
-          <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 4 }}>PDF, DOCX, JPG, PNG (Max 5MB)</div>
+          <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 4 }}>PDF, DOCX, JPG, PNG (Max 10MB)</div>
         </div>
       )}
 
