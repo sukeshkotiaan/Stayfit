@@ -10862,7 +10862,7 @@ function App() {
               <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10 }}>
                 {[["steps","👟","Steps"],["insights","🤖","AI Insights"],["workout","💪","Workout"],
                   ["challenges","🏆","Challenges"],["friends","👥","Friends"],
-                  ["foodscore","🥗","Food Score"],["settings","⚙️","Preferences"]].map(([k,ic,lb]) => (
+                  ["foodscore","🥗","Food Score"]].map(([k,ic,lb]) => (
                   <button key={k} onClick={() => { setDashTab(k); setShowMoreMenu(false); }}
                     style={{ background:dashTab===k?`${COLORS.accent}18`:isDark?"rgba(255,255,255,0.04)":"rgba(255,255,255,0.5)",
                       border:`1px solid ${dashTab===k?COLORS.accent+"44":COLORS.border}`,
