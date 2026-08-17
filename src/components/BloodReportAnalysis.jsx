@@ -36,8 +36,10 @@ export default function BloodReportAnalysis({ callAI, COLORS, FONTS, S }) {
     const file = e.target.files[0];
     if (!file) return;
 
-    if (file.size > 10 * 1024 * 1024) {
-      setError("File size must be less than 10MB");
+    // Vercel serverless functions have a strict 4.5MB payload limit. 
+    // Base64 adds ~33% overhead, so the strict max file size is ~3.3MB.
+    if (file.size > 3.3 * 1024 * 1024) {
+      setError("File is too large for the cloud analyzer. Please upload a file smaller than 3.3MB.");
       return;
     }
 
@@ -189,7 +191,7 @@ Return ONLY valid JSON in this exact format:
         >
           <div style={{ fontSize: 32, marginBottom: 8 }}>📄</div>
           <div style={{ fontSize: 14, fontWeight: 600, color: COLORS.text }}>Tap to Upload Report</div>
-          <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 4 }}>PDF, DOCX, JPG, PNG (Max 10MB)</div>
+          <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 4 }}>PDF, DOCX, JPG, PNG (Max 3.3MB)</div>
         </div>
       )}
 

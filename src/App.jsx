@@ -15,6 +15,7 @@ async function callAI(prompt, maxTokens = 8000, fileBase64 = null, fileMimeType 
     body: JSON.stringify({ prompt, maxTokens, fileBase64, fileMimeType, imageBase64: fileBase64 }),
   });
   if (res.status === 429) throw new Error("ALL_RATE_LIMITED");
+  if (res.status === 413) throw new Error("File is too large for the server. Please use a smaller file.");
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error(err.error || "AI request failed");
