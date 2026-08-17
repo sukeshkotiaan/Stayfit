@@ -8,11 +8,11 @@ import {
 } from "firebase/firestore";
 
 // ── AI via secure serverless proxy ────────────────────────────────────────────
-async function callAI(prompt, maxTokens = 8000, imageBase64 = null) {
+async function callAI(prompt, maxTokens = 8000, fileBase64 = null, fileMimeType = "image/jpeg") {
   const res = await fetch("/api/ai", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt, maxTokens, imageBase64 }),
+    body: JSON.stringify({ prompt, maxTokens, fileBase64, fileMimeType, imageBase64: fileBase64 }),
   });
   if (res.status === 429) throw new Error("ALL_RATE_LIMITED");
   if (!res.ok) {

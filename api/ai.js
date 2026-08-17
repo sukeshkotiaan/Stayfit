@@ -4,10 +4,10 @@ const GEMINI_KEYS = (process.env.GEMINI_KEYS || "").split(",").map(k => k.trim()
 const GROQ_KEYS   = (process.env.GROQ_KEYS   || "").split(",").map(k => k.trim()).filter(Boolean);
 const OR_KEYS     = (process.env.OPENROUTER_KEYS || "").split(",").map(k => k.trim()).filter(Boolean);
 
-async function callGemini(prompt, maxTokens, imageBase64) {
+async function callGemini(prompt, maxTokens, dataB64, mimeType = "image/jpeg") {
   for (const key of GEMINI_KEYS) {
-    const parts = imageBase64
-      ? [{ inlineData: { mimeType: "image/jpeg", data: imageBase64 } }, { text: prompt }]
+    const parts = dataB64
+      ? [{ inlineData: { mimeType: mimeType, data: dataB64 } }, { text: prompt }]
       : [{ text: prompt }];
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`,
@@ -61,11 +61,13 @@ async function callOpenRouter(prompt, maxTokens) {
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { prompt, maxTokens = 8000, imageBase64 = null } = req.body || {};
+  const { prompt, maxTokens = 8000, imageBase64 = null, fileBase64 = null, fileMimeType = "image/jpeg" } = req.body || {};
   if (!prompt) return res.status(400).json({ error: "prompt is required" });
 
+  const dataB64 = fileBase64 || imageBase64;
+
   const providers = [
-    { name: "Gemini", fn: () => callGemini(prompt, maxTokens, imageBase64) },
+    { name: "Gemini", fn: () => callGemini(prompt, maxTokens, dataB64, fileMimeType) },
     { name: "Groq",   fn: () => callGroq(prompt, maxTokens) },
     { name: "OpenRouter", fn: () => callOpenRouter(prompt, maxTokens) },
   ];

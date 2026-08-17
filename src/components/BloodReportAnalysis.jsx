@@ -4,30 +4,59 @@ export default function BloodReportAnalysis({ callAI, COLORS, FONTS, S }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
+  
   const [imagePreview, setImagePreview] = useState(null);
+  const [docText, setDocText] = useState(null);
+  const [fileMime, setFileMime] = useState(null);
+  const [fileName, setFileName] = useState("");
+  
   const fileInputRef = useRef(null);
 
-  const handleImageUpload = (e) => {
+  const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
     if (file.size > 5 * 1024 * 1024) {
-      setError("Image size must be less than 5MB");
+      setError("File size must be less than 5MB");
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setImagePreview(event.target.result);
-      setError("");
-      setResult(null);
-    };
-    reader.readAsDataURL(file);
+    setFileName(file.name);
+
+    if (file.name.endsWith('.docx')) {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          // Dynamically import mammoth to keep initial bundle size small
+          const mammoth = await import("mammoth/mammoth.browser");
+          const arrayBuffer = event.target.result;
+          const extracted = await mammoth.extractRawText({ arrayBuffer });
+          setDocText(extracted.value);
+          setImagePreview("word_doc"); // flag for UI
+          setFileMime(file.type);
+          setError("");
+          setResult(null);
+        } catch(err) { 
+          setError("Failed to read Word document. Please try a PDF or Image instead.");
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setImagePreview(event.target.result);
+        setDocText(null);
+        setFileMime(file.type); // e.g., application/pdf or image/jpeg
+        setError("");
+        setResult(null);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const analyzeReport = async () => {
     if (!imagePreview) {
-      setError("Please select an image first.");
+      setError("Please select a file first.");
       return;
     }
 
@@ -36,11 +65,8 @@ export default function BloodReportAnalysis({ callAI, COLORS, FONTS, S }) {
     setResult(null);
 
     try {
-      // Remove data:image/jpeg;base64, prefix
-      const base64Data = imagePreview.split(',')[1];
-      
-      const prompt = `You are a medical expert AI. Analyze this blood test report image. Extract the key biomarkers, compare them against standard reference ranges, and provide a plain-English summary.
-If the image does not look like a blood test report, return an error message in the JSON.
+      let prompt = `You are a medical expert AI. Analyze this blood test report. Extract the key biomarkers, compare them against standard reference ranges, and provide a plain-English summary.
+If the content does not look like a blood test report, return an error message in the JSON.
 Return ONLY valid JSON in this exact format:
 {
   "summary": "Overall 2-3 sentence summary in simple terms.",
@@ -55,7 +81,19 @@ Return ONLY valid JSON in this exact format:
   "recommendations": ["Actionable tip 1", "Actionable tip 2"]
 }`;
 
-      const { text } = await callAI(prompt, 1500, base64Data);
+      let base64Data = null;
+      let mimeType = "image/jpeg";
+      
+      if (docText) {
+        // If it's a DOCX, we send the extracted text appended to the prompt
+        prompt += "\n\nReport Text:\n" + docText;
+      } else {
+        // If it's PDF or Image, we send the base64 data to Gemini
+        base64Data = imagePreview.split(',')[1];
+        mimeType = fileMime || "image/jpeg";
+      }
+
+      const { text } = await callAI(prompt, 1500, base64Data, mimeType);
       
       let cleanText = text.trim().replace(/```json/g, "").replace(/```/g, "").trim();
       const parsed = JSON.parse(cleanText);
@@ -67,7 +105,7 @@ Return ONLY valid JSON in this exact format:
       setResult(parsed);
     } catch (err) {
       console.error(err);
-      setError("Failed to analyze the report. Please ensure the image is clear and try again.");
+      setError("Failed to analyze the report. Please ensure the file is clear and try again.");
     } finally {
       setLoading(false);
     }
@@ -85,12 +123,20 @@ Return ONLY valid JSON in this exact format:
     return `${COLORS.muted}15`;
   };
 
+  const resetAll = () => {
+    setResult(null);
+    setImagePreview(null);
+    setDocText(null);
+    setError("");
+    setFileName("");
+  };
+
   return (
     <div style={{ ...S.metricCard, marginBottom: 14 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <div>
           <div style={{ fontFamily: FONTS.head, fontSize: 16, fontWeight: 700 }}>🔬 Blood Report Analysis</div>
-          <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 2 }}>Upload a photo of your lab results for instant AI insights</div>
+          <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 2 }}>Upload a photo or PDF of your lab results for instant AI insights</div>
         </div>
       </div>
 
@@ -107,17 +153,17 @@ Return ONLY valid JSON in this exact format:
             transition: "all 0.2s"
           }}
         >
-          <div style={{ fontSize: 32, marginBottom: 8 }}>📸</div>
+          <div style={{ fontSize: 32, marginBottom: 8 }}>📄</div>
           <div style={{ fontSize: 14, fontWeight: 600, color: COLORS.text }}>Tap to Upload Report</div>
-          <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 4 }}>JPG, PNG (Max 5MB)</div>
+          <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 4 }}>PDF, DOCX, JPG, PNG (Max 5MB)</div>
         </div>
       )}
 
       <input 
         type="file" 
         ref={fileInputRef} 
-        onChange={handleImageUpload} 
-        accept="image/jpeg, image/png, image/webp" 
+        onChange={handleFileUpload} 
+        accept="image/jpeg, image/png, image/webp, application/pdf, .docx" 
         style={{ display: "none" }} 
       />
 
@@ -129,11 +175,24 @@ Return ONLY valid JSON in this exact format:
 
       {imagePreview && !result && (
         <div style={{ marginTop: 14 }}>
-          <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", marginBottom: 12, border: `1px solid ${COLORS.border}` }}>
-            <img src={imagePreview} alt="Report Preview" style={{ width: "100%", maxHeight: 200, objectFit: "cover", display: "block" }} />
+          <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", marginBottom: 12, border: `1px solid ${COLORS.border}`, background: "rgba(0,0,0,0.2)", display: "flex", alignItems: "center", justifyContent: "center", minHeight: 120 }}>
+            {imagePreview === "word_doc" ? (
+               <div style={{ textAlign: "center", padding: 20 }}>
+                 <div style={{ fontSize: 40, marginBottom: 10 }}>📝</div>
+                 <div style={{ fontSize: 14, color: COLORS.text, fontWeight: 600 }}>{fileName}</div>
+               </div>
+            ) : fileMime === "application/pdf" ? (
+               <div style={{ textAlign: "center", padding: 20 }}>
+                 <div style={{ fontSize: 40, marginBottom: 10 }}>📕</div>
+                 <div style={{ fontSize: 14, color: COLORS.text, fontWeight: 600 }}>{fileName}</div>
+               </div>
+            ) : (
+               <img src={imagePreview} alt="Report Preview" style={{ width: "100%", maxHeight: 200, objectFit: "cover", display: "block" }} />
+            )}
+            
             {!loading && (
               <button 
-                onClick={() => { setImagePreview(null); setError(""); }}
+                onClick={resetAll}
                 style={{ position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,0.6)", color: "white", border: "none", borderRadius: "50%", width: 28, height: 28, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
               >✕</button>
             )}
@@ -166,7 +225,7 @@ Return ONLY valid JSON in this exact format:
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.accent }}>Results Summary</div>
             <button 
-              onClick={() => { setResult(null); setImagePreview(null); }}
+              onClick={resetAll}
               style={{ ...S.btnSm, background: "transparent", color: COLORS.muted, border: `1px solid ${COLORS.border}`, padding: "4px 10px" }}
             >
               Upload Another
