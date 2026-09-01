@@ -6062,6 +6062,236 @@ function StepsCalorieBurn({ profile, userId, onBurnSaved, COLORS, FONTS, S }) {
   );
 }
 
+// ── WeightScaleConnect ────────────────────────────────────────────────────────
+function WeightScaleConnect({ userId, onWeightRead, COLORS, FONTS, S }) {
+  const [open, setOpen]           = useState(false);
+  const [status, setStatus]       = useState("idle"); // idle | connecting | reading | done | error
+  const [weight, setWeight]       = useState(null);
+  const [msg, setMsg]             = useState("");
+  const [method, setMethod]       = useState("bluetooth"); // bluetooth | googlefit | manual
+  const [gfitConnected, setGfitConnected] = useState(false);
+
+  // ── Web Bluetooth (Xiaomi Mi Scale, Renpho, etc.) ──────────────────────────
+  const connectBluetooth = async () => {
+    if (!navigator.bluetooth) {
+      setMsg("❌ Bluetooth not supported on this browser. Use Chrome on Android.");
+      setStatus("error"); return;
+    }
+    setStatus("connecting"); setMsg("Searching for nearby scales...");
+    try {
+      // Request Bluetooth device — generic weight scale service UUID
+      const device = await navigator.bluetooth.requestDevice({
+        filters: [
+          { services: ["0000181d-0000-1000-8000-00805f9b34fb"] }, // Weight Scale service
+          { namePrefix: "MI" }, { namePrefix: "Renpho" }, { namePrefix: "RENPHO" },
+          { namePrefix: "BF" }, { namePrefix: "Scale" },
+        ],
+        optionalServices: ["0000181d-0000-1000-8000-00805f9b34fb", "0000181b-0000-1000-8000-00805f9b34fb"],
+      });
+      setMsg(`📡 Connecting to ${device.name || "scale"}...`);
+      const server = await device.gatt.connect();
+      setStatus("reading"); setMsg("✅ Connected! Step on the scale...");
+
+      // Try Weight Scale service
+      try {
+        const service = await server.getPrimaryService("0000181d-0000-1000-8000-00805f9b34fb");
+        const char = await service.getCharacteristic("0000181d-0000-1000-8000-00805f9b34fb");
+        await char.startNotifications();
+        char.addEventListener("characteristicvaluechanged", (e) => {
+          const data = e.target.value;
+          // Standard weight measurement: bytes 1-2 = weight in 0.005kg units (little-endian)
+          const raw = data.getUint16(1, true);
+          const kg = (raw * 0.005).toFixed(1);
+          setWeight(kg); setStatus("done");
+          setMsg(`✅ Weight read: ${kg} kg`);
+          device.gatt.disconnect();
+        });
+      } catch {
+        // Fallback: read all characteristics for generic scales
+        setMsg("⚠️ Scale connected but couldn't read weight automatically. Enter manually below.");
+        setStatus("error");
+      }
+    } catch (e) {
+      if (e.name === "NotFoundError") { setMsg("No scale selected."); setStatus("idle"); }
+      else { setMsg("❌ Could not connect: " + e.message); setStatus("error"); }
+    }
+  };
+
+  // ── Google Fit OAuth ───────────────────────────────────────────────────────
+  const connectGoogleFit = () => {
+    const clientId = "YOUR_GOOGLE_CLIENT_ID"; // placeholder — needs setup
+    const scope = "https://www.googleapis.com/auth/fitness.body.read";
+    const redirect = window.location.origin;
+    const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirect}&response_type=token&scope=${encodeURIComponent(scope)}`;
+    const popup = window.open(url, "googlefit", "width=500,height=600");
+    const timer = setInterval(() => {
+      try {
+        if (popup.closed) { clearInterval(timer); return; }
+        const hash = popup.location.hash;
+        if (hash && hash.includes("access_token")) {
+          clearInterval(timer); popup.close();
+          const token = new URLSearchParams(hash.slice(1)).get("access_token");
+          fetchGoogleFitWeight(token);
+        }
+      } catch {}
+    }, 500);
+  };
+
+  const fetchGoogleFitWeight = async (token) => {
+    setStatus("reading"); setMsg("Fetching latest weight from Google Fit...");
+    try {
+      const end = Date.now();
+      const start = end - 30 * 24 * 60 * 60 * 1000; // last 30 days
+      const res = await fetch(
+        `https://www.googleapis.com/fitness/v1/users/me/dataset:aggregate`,
+        { method:"POST", headers:{ Authorization:`Bearer ${token}`, "Content-Type":"application/json" },
+          body: JSON.stringify({
+            aggregateBy:[{ dataTypeName:"com.google.weight" }],
+            bucketByTime:{ durationMillis: 86400000 },
+            startTimeMillis: start, endTimeMillis: end,
+          })
+        }
+      );
+      const data = await res.json();
+      const buckets = data.bucket || [];
+      let latestWeight = null;
+      for (const b of buckets.reverse()) {
+        const pts = b.dataset?.[0]?.point || [];
+        if (pts.length > 0) { latestWeight = pts[pts.length-1].value?.[0]?.fpVal; break; }
+      }
+      if (latestWeight) {
+        const kg = latestWeight.toFixed(1);
+        setWeight(kg); setStatus("done"); setGfitConnected(true);
+        setMsg(`✅ Latest weight from Google Fit: ${kg} kg`);
+      } else {
+        setMsg("No weight data found in Google Fit for the last 30 days.");
+        setStatus("error");
+      }
+    } catch (e) { setMsg("❌ Failed to fetch Google Fit data: " + e.message); setStatus("error"); }
+  };
+
+  const logWeight = async () => {
+    if (!weight) return;
+    try {
+      await addDoc(collection(db, "weight_logs"), {
+        user_id: userId, weight: parseFloat(weight),
+        note: method === "bluetooth" ? "From Bluetooth scale" : method === "googlefit" ? "From Google Fit" : "Manual",
+        logged_at: new Date().toISOString(),
+      });
+      onWeightRead?.(parseFloat(weight));
+      setMsg(`✅ ${weight} kg logged successfully!`);
+      setWeight(null); setStatus("idle");
+      setTimeout(() => { setOpen(false); setMsg(""); }, 1500);
+    } catch(e) { setMsg("❌ Could not log: " + e.message); }
+  };
+
+  return (
+    <div style={{ ...S.metricCard, marginBottom:10, border:`1px solid ${COLORS.accent}33`,
+      background:`${COLORS.accent}06` }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer" }} onClick={() => setOpen(o=>!o)}>
+        <div>
+          <div style={{ fontFamily:FONTS?.head, fontSize:13, fontWeight:700, color:COLORS.accent }}>⚖️ Connect Weight Scale</div>
+          <div style={{ fontSize:11, color:COLORS.muted, marginTop:2 }}>
+            Bluetooth scale · Google Fit sync · Manual entry
+          </div>
+        </div>
+        <span style={{ fontSize:16, color:COLORS.muted, transform:open?"rotate(180deg)":"none", transition:"transform 0.2s" }}>▾</span>
+      </div>
+
+      {open && (
+        <div style={{ marginTop:14 }}>
+          {/* Method selector */}
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginBottom:14 }}>
+            {[
+              ["bluetooth","📶","Bluetooth Scale","Direct Bluetooth"],
+              ["googlefit","🏃","Google Fit","Auto weight sync"],
+              ["manual","✏️","Manual","Type your weight"],
+            ].map(([m,e,l,d]) => (
+              <button key={m} onClick={() => { setMethod(m); setStatus("idle"); setMsg(""); setWeight(null); }}
+                style={{ padding:"10px 6px", borderRadius:10, cursor:"pointer", textAlign:"center",
+                  border:`2px solid ${method===m?COLORS.accent:COLORS.border}`,
+                  background: method===m ? `${COLORS.accent}15` : COLORS.card3 }}>
+                <div style={{ fontSize:20 }}>{e}</div>
+                <div style={{ fontSize:11, fontWeight:700, color:COLORS.text, marginTop:4 }}>{l}</div>
+                <div style={{ fontSize:10, color:COLORS.muted, marginTop:2 }}>{d}</div>
+              </button>
+            ))}
+          </div>
+
+          {/* Bluetooth */}
+          {method === "bluetooth" && (
+            <div>
+              <div style={{ fontSize:12, color:COLORS.muted, marginBottom:10, lineHeight:1.7 }}>
+                Works with: <b style={{ color:COLORS.text }}>Xiaomi Mi Scale, Renpho, Etekcity, Withings, Eufy</b> and other Bluetooth BLE scales.<br/>
+                ⚠️ Requires <b>Chrome on Android</b>. Not supported on iOS or Firefox.
+              </div>
+              <button onClick={connectBluetooth} disabled={status==="connecting"||status==="reading"}
+                style={{ width:"100%", padding:"12px", borderRadius:10, border:"none",
+                  background: status==="done" ? COLORS.success : COLORS.accent,
+                  color:"#07121f", fontWeight:800, fontSize:13,
+                  cursor: (status==="connecting"||status==="reading") ? "not-allowed" : "pointer",
+                  opacity: (status==="connecting"||status==="reading") ? 0.7 : 1 }}>
+                {status==="connecting" ? "🔍 Searching..." : status==="reading" ? "📡 Reading scale..." : status==="done" ? `✅ ${weight} kg — Log it!` : "📶 Connect Bluetooth Scale"}
+              </button>
+            </div>
+          )}
+
+          {/* Google Fit */}
+          {method === "googlefit" && (
+            <div>
+              <div style={{ fontSize:12, color:COLORS.muted, marginBottom:10, lineHeight:1.7 }}>
+                Syncs your latest weight from <b style={{ color:COLORS.text }}>Google Fit</b>. Your scale app (Mi Fit, Renpho, Fitbit, etc.) must sync to Google Fit first.
+              </div>
+              <button onClick={connectGoogleFit} disabled={status==="reading"}
+                style={{ width:"100%", padding:"12px", borderRadius:10, border:"none",
+                  background:"#4285f4", color:"#fff", fontWeight:800, fontSize:13,
+                  cursor: status==="reading" ? "not-allowed" : "pointer", opacity: status==="reading" ? 0.7 : 1 }}>
+                {status==="reading" ? "⏳ Fetching from Google Fit..." : status==="done" ? `✅ ${weight} kg — Log it!` : "🔗 Connect Google Fit"}
+              </button>
+              <div style={{ fontSize:11, color:COLORS.muted, marginTop:6, textAlign:"center" }}>
+                ⚠️ Requires Google Cloud project setup for production use
+              </div>
+            </div>
+          )}
+
+          {/* Manual */}
+          {method === "manual" && (
+            <div style={{ display:"flex", gap:8 }}>
+              <input type="number" step="0.1" placeholder="Enter weight (kg)"
+                value={weight||""} onChange={e => { setWeight(e.target.value); setStatus(e.target.value?"done":"idle"); }}
+                style={{ ...S.input, flex:1, fontSize:15, fontWeight:700, textAlign:"center" }} />
+              <button onClick={logWeight} disabled={!weight}
+                style={{ padding:"10px 18px", borderRadius:10, background: weight ? COLORS.accent : `${COLORS.accent}44`,
+                  border:"none", color:"#07121f", fontWeight:800, fontSize:13,
+                  cursor: weight ? "pointer" : "not-allowed" }}>
+                Log
+              </button>
+            </div>
+          )}
+
+          {/* Status message */}
+          {msg && (
+            <div style={{ marginTop:10, padding:"10px 14px", borderRadius:8, fontSize:13,
+              background: msg.includes("✅") ? `${COLORS.success}15` : `${COLORS.warn}15`,
+              color: msg.includes("✅") ? COLORS.success : COLORS.warn, lineHeight:1.6 }}>
+              {msg}
+            </div>
+          )}
+
+          {/* Log button when weight is read from BT/GFit */}
+          {weight && (method === "bluetooth" || method === "googlefit") && status === "done" && (
+            <button onClick={logWeight}
+              style={{ width:"100%", marginTop:10, padding:"12px", borderRadius:10, border:"none",
+                background:COLORS.success, color:"#07121f", fontWeight:800, fontSize:14, cursor:"pointer" }}>
+              ✓ Log {weight} kg to StayFit
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── HabitTracker ──────────────────────────────────────────────────────────────
 const HABITS = [
   { id:"water",   label:"Drink 8 glasses of water", emoji:"💧" },
@@ -8087,6 +8317,10 @@ function UserCard({ u, deleteUser, enableUser, approveUser, rejectUser, changeUs
   const [newPass, setNewPass] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [editProfile, setEditProfile] = useState({});
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileSaveMsg, setProfileSaveMsg] = useState("");
   const p = u.profile_data || {};
   const d = u.device_info || {};
 
@@ -8219,28 +8453,191 @@ function UserCard({ u, deleteUser, enableUser, approveUser, rejectUser, changeUs
           {/* ACCOUNT TAB */}
           {activeTab === "account" && (
             <div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 8, marginBottom: 14 }}>
-                {[["Username", u.username], ["Country", `${u.country||"—"}${u.state?` / ${u.state}`:""}`], ["Registered", u.created_at?.split("T")[0]], ["Goal", p.goal||"—"], ["Food Pref", p.foodPref||"—"], ["Fitness Level", p.fitnessLevel||"—"], ["Workout Type", p.workoutType||"—"], ["Conditions", (p.conditions||[]).join(", ")||"None"], ["Medications", p.medications||"None"]].map(([l,v]) => (
-                  <div key={l} style={{ background:"#0a0f1e", borderRadius:8, padding:"8px 12px" }}>
-                    <div style={{ fontSize:10, color:COLORS.muted, fontWeight:600, marginBottom:2 }}>{l.toUpperCase()}</div>
-                    <div style={{ fontSize:12, color:COLORS.text }}>{v}</div>
-                  </div>
-                ))}
-                <div style={{ background:"#0a0f1e", borderRadius:8, padding:"8px 12px" }}>
-                  <div style={{ fontSize:10, color:COLORS.muted, fontWeight:600, marginBottom:4 }}>PASSWORD</div>
-                  <div style={{ display:"flex", gap:6, alignItems:"center" }}>
-                    <span style={{ fontSize:13, color:COLORS.text, fontFamily:"monospace" }}>{showPass ? u.password_hash : "••••••••"}</span>
-                    <button onClick={() => setShowPass(!showPass)} style={{ background:"transparent", border:`1px solid rgba(255,255,255,0.08)`, borderRadius:6, padding:"1px 8px", color:"#8892aa", fontSize:11, cursor:"pointer" }}>{showPass?"Hide":"Show"}</button>
-                  </div>
-                </div>
+              {/* Edit Profile toggle */}
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+                <div style={{ fontSize:12, fontWeight:700, color:COLORS.muted, letterSpacing:1 }}>PROFILE DATA</div>
+                <button onClick={() => { setEditingProfile(e => !e); setEditProfile({ ...p }); setProfileSaveMsg(""); }}
+                  style={{ fontSize:12, padding:"5px 14px", borderRadius:8, border:`1px solid ${COLORS.accent}44`,
+                    background: editingProfile ? `${COLORS.accent}22` : "transparent",
+                    color:COLORS.accent, cursor:"pointer", fontWeight:600 }}>
+                  {editingProfile ? "✕ Cancel" : "✏️ Edit Profile"}
+                </button>
               </div>
 
-              {/* Schedule */}
-              {p.schedule?.length > 0 && (
-                <div style={{ marginTop:12 }}>
-                  <div style={{ fontSize:11, color:COLORS.accent, fontWeight:700, letterSpacing:1, marginBottom:8 }}>DAILY SCHEDULE</div>
-                  <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
-                    {p.schedule.map((s,i) => <span key={i} style={{ padding:"3px 10px", borderRadius:20, background:"#111827", border:`1px solid rgba(255,255,255,0.08)`, fontSize:12, color:"#8892aa" }}>{s.time} — {s.label}</span>)}
+              {/* VIEW mode */}
+              {!editingProfile && (
+                <>
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(160px, 1fr))", gap:8, marginBottom:14 }}>
+                    {[
+                      ["Username", u.username],
+                      ["Country", `${u.country||"—"}${u.state?` / ${u.state}`:""}`],
+                      ["Registered", u.created_at?.split("T")[0]],
+                      ["Weight", p.weight ? `${p.weight} kg` : "—"],
+                      ["Height", p.height ? `${p.height} cm` : "—"],
+                      ["Age", p.age || "—"],
+                      ["Gender", p.gender || "—"],
+                      ["Target Weight", p.targetWeight ? `${p.targetWeight} kg` : "—"],
+                      ["Goal", p.goal||"—"],
+                      ["Food Pref", p.foodPref||"—"],
+                      ["Fitness Level", p.fitnessLevel||"—"],
+                      ["Workout Type", p.workoutType||"—"],
+                      ["Workout Freq", p.workoutFrequency||"—"],
+                      ["Conditions", (p.conditions||[]).join(", ")||"None"],
+                      ["Medications", p.medications||"None"],
+                    ].map(([l,v]) => (
+                      <div key={l} style={{ background:"#0a0f1e", borderRadius:8, padding:"8px 12px" }}>
+                        <div style={{ fontSize:10, color:COLORS.muted, fontWeight:600, marginBottom:2 }}>{l.toUpperCase()}</div>
+                        <div style={{ fontSize:12, color:COLORS.text }}>{v}</div>
+                      </div>
+                    ))}
+                    <div style={{ background:"#0a0f1e", borderRadius:8, padding:"8px 12px" }}>
+                      <div style={{ fontSize:10, color:COLORS.muted, fontWeight:600, marginBottom:4 }}>PASSWORD</div>
+                      <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+                        <span style={{ fontSize:13, color:COLORS.text, fontFamily:"monospace" }}>{showPass ? u.password_hash : "••••••••"}</span>
+                        <button onClick={() => setShowPass(!showPass)} style={{ background:"transparent", border:`1px solid rgba(255,255,255,0.08)`, borderRadius:6, padding:"1px 8px", color:"#8892aa", fontSize:11, cursor:"pointer" }}>{showPass?"Hide":"Show"}</button>
+                      </div>
+                    </div>
+                  </div>
+                  {p.schedule?.length > 0 && (
+                    <div style={{ marginTop:12 }}>
+                      <div style={{ fontSize:11, color:COLORS.accent, fontWeight:700, letterSpacing:1, marginBottom:8 }}>DAILY SCHEDULE</div>
+                      <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                        {p.schedule.map((s,i) => <span key={i} style={{ padding:"3px 10px", borderRadius:20, background:"#111827", border:`1px solid rgba(255,255,255,0.08)`, fontSize:12, color:"#8892aa" }}>{s.time} — {s.label}</span>)}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* EDIT mode */}
+              {editingProfile && (
+                <div style={{ background:"#0a0f1e", borderRadius:12, padding:"16px", border:`1px solid ${COLORS.accent}33` }}>
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(160px,1fr))", gap:10, marginBottom:14 }}>
+                    {/* Numeric fields */}
+                    {[["weight","Weight (kg)","number"],["height","Height (cm)","number"],["age","Age","number"],["targetWeight","Target Weight (kg)","number"]].map(([k,lbl,t]) => (
+                      <div key={k}>
+                        <label style={{ fontSize:10, color:COLORS.muted, fontWeight:700, display:"block", marginBottom:4 }}>{lbl.toUpperCase()}</label>
+                        <input type={t} value={editProfile[k]||""} onChange={e => setEditProfile(p => ({...p,[k]:e.target.value}))}
+                          style={{ ...S.input, fontSize:13, padding:"7px 10px" }} />
+                      </div>
+                    ))}
+
+                    {/* Gender */}
+                    <div>
+                      <label style={{ fontSize:10, color:COLORS.muted, fontWeight:700, display:"block", marginBottom:4 }}>GENDER</label>
+                      <select value={editProfile.gender||""} onChange={e => setEditProfile(p => ({...p, gender:e.target.value}))} style={{ ...S.select, fontSize:13, padding:"7px 10px" }}>
+                        <option value="">Select</option><option>Male</option><option>Female</option>
+                      </select>
+                    </div>
+
+                    {/* Goal */}
+                    <div>
+                      <label style={{ fontSize:10, color:COLORS.muted, fontWeight:700, display:"block", marginBottom:4 }}>GOAL</label>
+                      <select value={editProfile.goal||""} onChange={e => setEditProfile(p => ({...p, goal:e.target.value}))} style={{ ...S.select, fontSize:13, padding:"7px 10px" }}>
+                        <option value="">Select</option>
+                        {["Lose Weight","Build Muscle","Stay Healthy","Improve Fitness","Gain Weight","Maintain Weight"].map(g => <option key={g}>{g}</option>)}
+                      </select>
+                    </div>
+
+                    {/* Fitness Level */}
+                    <div>
+                      <label style={{ fontSize:10, color:COLORS.muted, fontWeight:700, display:"block", marginBottom:4 }}>FITNESS LEVEL</label>
+                      <select value={editProfile.fitnessLevel||""} onChange={e => setEditProfile(p => ({...p, fitnessLevel:e.target.value}))} style={{ ...S.select, fontSize:13, padding:"7px 10px" }}>
+                        <option value="">Select</option>
+                        {["Beginner","Moderate","Active"].map(l => <option key={l}>{l}</option>)}
+                      </select>
+                    </div>
+
+                    {/* Workout Type */}
+                    <div>
+                      <label style={{ fontSize:10, color:COLORS.muted, fontWeight:700, display:"block", marginBottom:4 }}>WORKOUT TYPE</label>
+                      <select value={editProfile.workoutType||""} onChange={e => setEditProfile(p => ({...p, workoutType:e.target.value}))} style={{ ...S.select, fontSize:13, padding:"7px 10px" }}>
+                        <option value="">Select</option>
+                        {["Home","Gym","Outdoor"].map(l => <option key={l}>{l}</option>)}
+                      </select>
+                    </div>
+
+                    {/* Workout Frequency */}
+                    <div>
+                      <label style={{ fontSize:10, color:COLORS.muted, fontWeight:700, display:"block", marginBottom:4 }}>WORKOUT FREQ</label>
+                      <select value={editProfile.workoutFrequency||""} onChange={e => setEditProfile(p => ({...p, workoutFrequency:e.target.value}))} style={{ ...S.select, fontSize:13, padding:"7px 10px" }}>
+                        <option value="">Select</option>
+                        {["2x per week","3x per week","4x per week","5x per week","6x per week","Daily"].map(l => <option key={l}>{l}</option>)}
+                      </select>
+                    </div>
+
+                    {/* Food Preference */}
+                    <div>
+                      <label style={{ fontSize:10, color:COLORS.muted, fontWeight:700, display:"block", marginBottom:4 }}>FOOD PREFERENCE</label>
+                      <select value={editProfile.foodPref||""} onChange={e => setEditProfile(p => ({...p, foodPref:e.target.value}))} style={{ ...S.select, fontSize:13, padding:"7px 10px" }}>
+                        <option value="">Select</option>
+                        {["Vegetarian","Non-Vegetarian","Vegan","Eggetarian","Jain"].map(l => <option key={l}>{l}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Medical Conditions */}
+                  <div style={{ marginBottom:12 }}>
+                    <label style={{ fontSize:10, color:COLORS.muted, fontWeight:700, display:"block", marginBottom:6 }}>MEDICAL CONDITIONS</label>
+                    <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                      {(typeof MEDICAL_CONDITIONS !== "undefined" ? MEDICAL_CONDITIONS : ["Diabetes","Hypertension","PCOD/PCOS","Thyroid","Heart Disease","Kidney Disease","Asthma","Arthritis"]).map(c => {
+                        const sel = (editProfile.conditions||[]).includes(c);
+                        return (
+                          <button key={c} onClick={() => setEditProfile(p => ({ ...p, conditions: sel ? (p.conditions||[]).filter(x=>x!==c) : [...(p.conditions||[]), c] }))}
+                            style={{ padding:"4px 12px", borderRadius:20, fontSize:11, cursor:"pointer", fontWeight:600,
+                              border:`1.5px solid ${sel?COLORS.accent3:COLORS.border}`,
+                              background: sel ? `${COLORS.accent3}20` : "transparent",
+                              color: sel ? COLORS.accent3 : COLORS.muted }}>
+                            {sel?"✓ ":""}{c}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Medications */}
+                  <div style={{ marginBottom:14 }}>
+                    <label style={{ fontSize:10, color:COLORS.muted, fontWeight:700, display:"block", marginBottom:4 }}>MEDICATIONS</label>
+                    <textarea value={editProfile.medications||""} onChange={e => setEditProfile(p => ({...p, medications:e.target.value}))}
+                      placeholder="e.g. Metformin 500mg morning..."
+                      style={{ ...S.input, minHeight:60, resize:"vertical", fontSize:12 }} />
+                  </div>
+
+                  {profileSaveMsg && (
+                    <div style={{ padding:"8px 12px", borderRadius:8, marginBottom:10, fontSize:13, fontWeight:600,
+                      background: profileSaveMsg.includes("✅") ? `${COLORS.success}15` : `${COLORS.warn}15`,
+                      color: profileSaveMsg.includes("✅") ? COLORS.success : COLORS.warn }}>
+                      {profileSaveMsg}
+                    </div>
+                  )}
+
+                  <div style={{ display:"flex", gap:8 }}>
+                    <button onClick={async () => {
+                      setSavingProfile(true); setProfileSaveMsg("");
+                      try {
+                        const updatedProfile = { ...p, ...editProfile };
+                        await updateDoc(doc(db, "users", String(u.id)), { profile_data: updatedProfile });
+                        // Also update weight log if weight changed
+                        if (editProfile.weight && editProfile.weight !== p.weight) {
+                          await addDoc(collection(db, "weight_logs"), {
+                            user_id: u.id, weight: parseFloat(editProfile.weight),
+                            note: "Updated by admin", logged_at: new Date().toISOString(),
+                          });
+                        }
+                        setProfileSaveMsg("✅ Profile saved successfully!");
+                        setTimeout(() => { setEditingProfile(false); setProfileSaveMsg(""); }, 1500);
+                      } catch(e) { setProfileSaveMsg("❌ Error: " + e.message); }
+                      setSavingProfile(false);
+                    }} disabled={savingProfile}
+                      style={{ flex:1, padding:"10px", borderRadius:10, background: COLORS.accent, border:"none",
+                        color:"#07121f", fontWeight:800, fontSize:13, cursor: savingProfile ? "not-allowed" : "pointer", opacity: savingProfile ? 0.7 : 1 }}>
+                      {savingProfile ? "Saving..." : "💾 Save Changes"}
+                    </button>
+                    <button onClick={() => { setEditingProfile(false); setProfileSaveMsg(""); }}
+                      style={{ padding:"10px 16px", borderRadius:10, border:`1px solid ${COLORS.border}`,
+                        background:"transparent", color:COLORS.muted, fontSize:13, cursor:"pointer" }}>
+                      Cancel
+                    </button>
                   </div>
                 </div>
               )}
@@ -10100,6 +10497,13 @@ function App() {
                   </button>
                 </div>
               </div>
+
+              {/* Weight Scale Connect */}
+              <WeightScaleConnect
+                userId={currentUser.id}
+                onWeightRead={(w) => { setLogForm(p => ({...p, weight: String(w)})); loadLogs(currentUser.id); }}
+                COLORS={COLORS} FONTS={FONTS} S={S}
+              />
 
               {/* Greeting header */}
               {(() => {
