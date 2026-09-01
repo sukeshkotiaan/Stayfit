@@ -8321,6 +8321,25 @@ function UserCard({ u, deleteUser, enableUser, approveUser, rejectUser, changeUs
   const [editProfile, setEditProfile] = useState({});
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileSaveMsg, setProfileSaveMsg] = useState("");
+  // Refresh keys so CalorieBurnTab/SleepTracker re-fetch after admin logs data
+  const [burnRefreshKey, setBurnRefreshKey] = useState(0);
+  const [sleepRefreshKey, setSleepRefreshKey] = useState(0);
+  // Weight logging state (for progress tab)
+  const [adminWeightInput, setAdminWeightInput] = useState("");
+  const [adminWeightNote, setAdminWeightNote] = useState("");
+  const [adminWeightSaving, setAdminWeightSaving] = useState(false);
+  const [adminWeightMsg, setAdminWeightMsg] = useState("");
+  const [weightLogs, setWeightLogs] = useState(null); // null = not loaded yet
+  // Food preferences editing state
+  const [editingFoodPrefs, setEditingFoodPrefs] = useState(false);
+  const [foodPrefsSelected, setFoodPrefsSelected] = useState({});
+  const [foodPrefsSaving, setFoodPrefsSaving] = useState(false);
+  const [foodPrefsMsg, setFoodPrefsMsg] = useState("");
+  // Schedule editing state
+  const [editingSchedule, setEditingSchedule] = useState(false);
+  const [scheduleSlots, setScheduleSlots] = useState([]);
+  const [scheduleSaving, setScheduleSaving] = useState(false);
+  const [scheduleMsg, setScheduleMsg] = useState("");
   const p = u.profile_data || {};
   const d = u.device_info || {};
 
@@ -8425,7 +8444,9 @@ function UserCard({ u, deleteUser, enableUser, approveUser, rejectUser, changeUs
             paddingBottom:4, scrollbarWidth:"none", WebkitOverflowScrolling:"touch" }}>
             {[
               ["account",    "👤 Account"],
-              ["today",      "📅 Today"],
+              ["schedule",   "📅 Schedule"],
+              ["foodprefs",  "🥘 Food Prefs"],
+              ["today",      "📋 Today's Plan"],
               ["metrics",    "📊 Metrics"],
               ["progress",   "📈 Progress"],
               ["foodlog",    "🍱 Food Log"],
@@ -8791,7 +8812,34 @@ function UserCard({ u, deleteUser, enableUser, approveUser, rejectUser, changeUs
 
           {/* PROGRESS TAB */}
           {activeTab === "progress" && (() => {
-            // UserCard doesn't have logs; show a prompt
+            // Load weight logs lazily
+            if (weightLogs === null) {
+              getDocs(query(collection(db, "weight_logs"), where("user_id","==",u.id))).then(snap => {
+                const logs = snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>new Date(b.logged_at)-new Date(a.logged_at));
+                setWeightLogs(logs);
+              });
+            }
+            const logWeight = async () => {
+              const w = parseFloat(adminWeightInput);
+              if (!w || w < 20 || w > 300) { setAdminWeightMsg("❌ Enter a valid weight (20–300 kg)"); return; }
+              setAdminWeightSaving(true); setAdminWeightMsg("");
+              try {
+                await addDoc(collection(db, "weight_logs"), {
+                  user_id: u.id, weight: w, note: adminWeightNote || "Logged by admin",
+                  logged_at: new Date().toISOString(),
+                });
+                // Also update profile current weight
+                await updateDoc(doc(db, "users", String(u.id)), { "profile_data.weight": String(w) });
+                setAdminWeightMsg("✅ Weight logged!");
+                setAdminWeightInput(""); setAdminWeightNote("");
+                // refresh logs
+                const snap = await getDocs(query(collection(db, "weight_logs"), where("user_id","==",u.id)));
+                setWeightLogs(snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>new Date(b.logged_at)-new Date(a.logged_at)));
+                setTimeout(() => setAdminWeightMsg(""), 2000);
+              } catch(e) { setAdminWeightMsg("❌ " + e.message); }
+              setAdminWeightSaving(false);
+            };
+            const target = parseFloat(p.targetWeight) || null;
             return (
               <div>
                 {metrics ? (
@@ -8812,7 +8860,7 @@ function UserCard({ u, deleteUser, enableUser, approveUser, rejectUser, changeUs
                         </div>
                       ))}
                     </div>
-                    <div style={{ background:"#0a0f1e", borderRadius:10, padding:"12px 16px" }}>
+                    <div style={{ background:"#0a0f1e", borderRadius:10, padding:"12px 16px", marginBottom:14 }}>
                       <div style={{ fontSize:12, color:"#8892aa" }}>
                         Profile: <b style={{ color:"#f0f4ff" }}>{p.weight}kg · {p.height}cm · {p.age}y · {p.gender}</b>
                         {p.targetWeight && <> · Target: <b style={{ color:"#00d4aa" }}>{p.targetWeight}kg</b></>}
@@ -8822,7 +8870,66 @@ function UserCard({ u, deleteUser, enableUser, approveUser, rejectUser, changeUs
                     </div>
                   </>
                 ) : (
-                  <div style={{ textAlign:"center", padding:"2rem", color:"#8892aa", fontSize:14 }}>User hasn't completed health profile yet.</div>
+                  <div style={{ textAlign:"center", padding:"1rem", color:"#8892aa", fontSize:14, marginBottom:14 }}>User hasn't completed health profile yet.</div>
+                )}
+
+                {/* Weight Log Section */}
+                <div style={{ background:"#0a0f1e", borderRadius:12, padding:"14px 16px", marginBottom:14, border:`1px solid ${COLORS.accent}22` }}>
+                  <div style={{ fontWeight:700, fontSize:14, color:COLORS.accent, marginBottom:12 }}>⚖️ Log Weight for User</div>
+                  <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginBottom:10 }}>
+                    <div style={{ flex:1, minWidth:120 }}>
+                      <label style={{ fontSize:10, color:COLORS.muted, fontWeight:700, display:"block", marginBottom:4 }}>WEIGHT (KG)</label>
+                      <input type="number" step="0.1" value={adminWeightInput} onChange={e=>setAdminWeightInput(e.target.value)}
+                        placeholder={p.weight || "e.g. 72.5"}
+                        style={{ ...S.input, fontSize:13, padding:"8px 12px" }} />
+                    </div>
+                    <div style={{ flex:2, minWidth:200 }}>
+                      <label style={{ fontSize:10, color:COLORS.muted, fontWeight:700, display:"block", marginBottom:4 }}>NOTE (OPTIONAL)</label>
+                      <input type="text" value={adminWeightNote} onChange={e=>setAdminWeightNote(e.target.value)}
+                        placeholder="e.g. Morning weigh-in"
+                        style={{ ...S.input, fontSize:13, padding:"8px 12px" }} />
+                    </div>
+                    <div style={{ display:"flex", alignItems:"flex-end" }}>
+                      <button onClick={logWeight} disabled={adminWeightSaving || !adminWeightInput}
+                        style={{ ...S.btn, width:"auto", padding:"9px 20px", fontSize:13, opacity: !adminWeightInput ? 0.5 : 1 }}>
+                        {adminWeightSaving ? "Saving…" : "➕ Log"}
+                      </button>
+                    </div>
+                  </div>
+                  {adminWeightMsg && <div style={{ fontSize:13, fontWeight:600, color: adminWeightMsg.startsWith("✅") ? COLORS.success : COLORS.warn, marginBottom:8 }}>{adminWeightMsg}</div>}
+                </div>
+
+                {/* Weight history */}
+                {weightLogs && weightLogs.length > 0 && (
+                  <div style={{ background:"#0a0f1e", borderRadius:12, padding:"14px 16px" }}>
+                    <div style={{ fontWeight:700, fontSize:13, color:COLORS.text, marginBottom:10 }}>📉 Weight History (last 20 entries)</div>
+                    {target && (
+                      <div style={{ fontSize:12, color:COLORS.muted, marginBottom:10 }}>
+                        Target: <b style={{ color:COLORS.accent }}>{target} kg</b> · Current: <b style={{ color:COLORS.text }}>{weightLogs[0]?.weight} kg</b>
+                        · <b style={{ color: weightLogs[0]?.weight <= target ? COLORS.success : COLORS.accent3 }}>
+                          {Math.abs((weightLogs[0]?.weight - target).toFixed(1))} kg {weightLogs[0]?.weight <= target ? "✅ at goal" : "to go"}
+                        </b>
+                      </div>
+                    )}
+                    <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                      {weightLogs.slice(0,20).map((log, i) => {
+                        const prev = weightLogs[i+1];
+                        const diff = prev ? (log.weight - prev.weight).toFixed(1) : null;
+                        const diffColor = diff === null ? COLORS.muted : diff < 0 ? COLORS.success : diff > 0 ? COLORS.warn : COLORS.muted;
+                        return (
+                          <div key={log.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"6px 10px", background:"rgba(255,255,255,0.02)", borderRadius:8 }}>
+                            <span style={{ fontSize:11, color:COLORS.muted, minWidth:90 }}>{new Date(log.logged_at).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"2-digit"})}</span>
+                            <span style={{ fontWeight:700, fontSize:14, color:COLORS.text }}>{log.weight} kg</span>
+                            {diff !== null && <span style={{ fontSize:11, fontWeight:600, color:diffColor }}>{diff > 0 ? "+" : ""}{diff}</span>}
+                            {log.note && <span style={{ fontSize:11, color:COLORS.muted, flex:1 }}>{log.note}</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                {weightLogs && weightLogs.length === 0 && (
+                  <div style={{ textAlign:"center", padding:"1rem", color:COLORS.muted, fontSize:13 }}>No weight logs yet. Use the form above to add one.</div>
                 )}
               </div>
             );
@@ -9131,13 +9238,13 @@ function UserCard({ u, deleteUser, enableUser, approveUser, rejectUser, changeUs
 
           {/* ── Additional user tabs in admin ── */}
           {activeTab === "calorieburn" && (
-            <AdminUserDataView collection="calorie_burns" userId={u.id} renderFn={(items) => (
-              <CalorieBurnTab userId={u.id} calorieBurns={items} onBurnSaved={()=>{}} COLORS={COLORS} FONTS={{ head:"'Syne',sans-serif", body:"'Inter','DM Sans',sans-serif" }} S={S} />
+            <AdminUserDataView key={`burn-${burnRefreshKey}`} collection="calorie_burns" userId={u.id} renderFn={(items) => (
+              <CalorieBurnTab userId={u.id} calorieBurns={items} onBurnSaved={() => setBurnRefreshKey(k => k+1)} COLORS={COLORS} FONTS={{ head:"'Syne',sans-serif", body:"'Inter','DM Sans',sans-serif" }} S={S} />
             )} COLORS={COLORS} />
           )}
           {activeTab === "sleep" && (
-            <AdminUserDataView collection="sleep_logs" userId={u.id} renderFn={(items) => (
-              <SleepTracker userId={u.id} sleepLogs={items} onSaved={()=>{}} COLORS={COLORS} FONTS={{ head:"'Syne',sans-serif", body:"'Inter','DM Sans',sans-serif" }} S={S} />
+            <AdminUserDataView key={`sleep-${sleepRefreshKey}`} collection="sleep_logs" userId={u.id} renderFn={(items) => (
+              <SleepTracker userId={u.id} sleepLogs={items} onSaved={() => setSleepRefreshKey(k => k+1)} COLORS={COLORS} FONTS={{ head:"'Syne',sans-serif", body:"'Inter','DM Sans',sans-serif" }} S={S} />
             )} COLORS={COLORS} />
           )}
           {activeTab === "steps" && (
@@ -9157,6 +9264,194 @@ function UserCard({ u, deleteUser, enableUser, approveUser, rejectUser, changeUs
               currentWeight={parseFloat(u.profile_data?.weight)||70} userLogs={[]}
               COLORS={COLORS} FONTS={{ head:"'Syne',sans-serif", body:"'Inter','DM Sans',sans-serif" }} S={S} notify={()=>{}} />
           )}
+
+          {/* SCHEDULE TAB — admin can edit user's daily schedule */}
+          {activeTab === "schedule" && (() => {
+            const currentSlots = editingSchedule ? scheduleSlots : (p.schedule || []);
+            const defaultSlots = [
+              { time:"06:00", label:"Wake Up" }, { time:"07:00", label:"Breakfast" },
+              { time:"09:00", label:"Work / College" }, { time:"13:00", label:"Lunch" },
+              { time:"17:00", label:"Evening Snack" }, { time:"19:00", label:"Gym / Workout" },
+              { time:"21:00", label:"Dinner" }, { time:"22:30", label:"Sleep / Bed" },
+            ];
+            return (
+              <div>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+                  <div style={{ fontWeight:700, fontSize:15, color:COLORS.text }}>📅 Daily Schedule</div>
+                  {!editingSchedule ? (
+                    <button onClick={() => { setScheduleSlots(p.schedule?.length ? [...p.schedule] : [...defaultSlots]); setEditingSchedule(true); setScheduleMsg(""); }}
+                      style={{ fontSize:12, padding:"6px 14px", borderRadius:8, border:`1px solid ${COLORS.accent}44`, background:"transparent", color:COLORS.accent, cursor:"pointer", fontWeight:600 }}>
+                      ✏️ Edit Schedule
+                    </button>
+                  ) : (
+                    <div style={{ display:"flex", gap:8 }}>
+                      <button onClick={async () => {
+                        setScheduleSaving(true); setScheduleMsg("");
+                        try {
+                          await updateDoc(doc(db, "users", String(u.id)), { "profile_data.schedule": scheduleSlots });
+                          setScheduleMsg("✅ Schedule saved!");
+                          setEditingSchedule(false);
+                          setTimeout(() => setScheduleMsg(""), 2000);
+                        } catch(e) { setScheduleMsg("❌ " + e.message); }
+                        setScheduleSaving(false);
+                      }} disabled={scheduleSaving}
+                        style={{ fontSize:12, padding:"6px 14px", borderRadius:8, border:"none", background:COLORS.accent, color:"#07121f", cursor:"pointer", fontWeight:700 }}>
+                        {scheduleSaving ? "Saving…" : "💾 Save"}
+                      </button>
+                      <button onClick={() => { setEditingSchedule(false); setScheduleMsg(""); }}
+                        style={{ fontSize:12, padding:"6px 14px", borderRadius:8, border:`1px solid ${COLORS.border}`, background:"transparent", color:COLORS.muted, cursor:"pointer" }}>
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {scheduleMsg && <div style={{ fontSize:13, fontWeight:600, marginBottom:10, color: scheduleMsg.startsWith("✅") ? COLORS.success : COLORS.warn }}>{scheduleMsg}</div>}
+
+                {!editingSchedule && currentSlots.length === 0 && (
+                  <div style={{ textAlign:"center", padding:"2rem", color:COLORS.muted, fontSize:13 }}>
+                    <div style={{ fontSize:32, marginBottom:8 }}>📅</div>
+                    User hasn't set a schedule yet. Click Edit to create one.
+                  </div>
+                )}
+
+                {/* View mode */}
+                {!editingSchedule && currentSlots.length > 0 && (
+                  <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                    {currentSlots.map((s, i) => (
+                      <div key={i} style={{ display:"flex", gap:14, alignItems:"center", padding:"10px 14px", background:"rgba(255,255,255,0.03)", borderRadius:10, border:`1px solid ${COLORS.border}` }}>
+                        <span style={{ fontSize:14, fontWeight:700, color:COLORS.accent, minWidth:54, fontFamily:"monospace" }}>{s.time}</span>
+                        <span style={{ fontSize:13, color:COLORS.text }}>{s.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Edit mode */}
+                {editingSchedule && (
+                  <div>
+                    <div style={{ fontSize:12, color:COLORS.muted, marginBottom:10 }}>Add, edit, or remove time slots. Drag to reorder is not supported — delete and re-add to reorder.</div>
+                    <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:14 }}>
+                      {scheduleSlots.map((s, i) => (
+                        <div key={i} style={{ display:"flex", gap:8, alignItems:"center" }}>
+                          <input type="time" value={s.time} onChange={e => setScheduleSlots(sl => sl.map((x,j) => j===i ? {...x,time:e.target.value} : x))}
+                            style={{ ...S.input, width:110, fontSize:13, padding:"8px 10px", fontFamily:"monospace" }} />
+                          <input type="text" value={s.label} onChange={e => setScheduleSlots(sl => sl.map((x,j) => j===i ? {...x,label:e.target.value} : x))}
+                            placeholder="e.g. Breakfast, Gym..."
+                            style={{ ...S.input, flex:1, fontSize:13, padding:"8px 12px" }} />
+                          <button onClick={() => setScheduleSlots(sl => sl.filter((_,j) => j!==i))}
+                            style={{ background:"transparent", border:`1px solid ${COLORS.warn}44`, borderRadius:8, padding:"6px 10px", color:COLORS.warn, fontSize:12, cursor:"pointer" }}>✕</button>
+                        </div>
+                      ))}
+                    </div>
+                    <button onClick={() => setScheduleSlots(sl => [...sl, { time:"08:00", label:"" }].sort((a,b)=>a.time.localeCompare(b.time)))}
+                      style={{ ...S.btnSm, color:COLORS.accent, borderColor:`${COLORS.accent}44`, padding:"8px 16px", fontSize:12 }}>
+                      ➕ Add Slot
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* FOOD PREFERENCES TAB — admin can view/edit user's liked foods */}
+          {activeTab === "foodprefs" && (() => {
+            const MEAL_KEYS = ["Breakfast","Lunch","Evening Snack","Dinner","Munching","Fruits"];
+            const savedPrefs = p.likedFoods || {};
+            const displayPrefs = editingFoodPrefs ? foodPrefsSelected : savedPrefs;
+            return (
+              <div>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+                  <div>
+                    <div style={{ fontWeight:700, fontSize:15, color:COLORS.text }}>🥘 Food Preferences</div>
+                    <div style={{ fontSize:12, color:COLORS.muted, marginTop:2 }}>
+                      Foods the user likes — used to generate their AI meal plan.
+                      {p.foodPref && <span style={{ marginLeft:6, padding:"2px 8px", borderRadius:20, background:`${COLORS.accent}15`, color:COLORS.accent, fontSize:11, fontWeight:600 }}>{p.foodPref}</span>}
+                    </div>
+                  </div>
+                  {!editingFoodPrefs ? (
+                    <button onClick={() => {
+                      const init = {};
+                      MEAL_KEYS.forEach(k => { init[k] = [...(savedPrefs[k]||[])]; });
+                      setFoodPrefsSelected(init);
+                      setEditingFoodPrefs(true); setFoodPrefsMsg("");
+                    }}
+                      style={{ fontSize:12, padding:"6px 14px", borderRadius:8, border:`1px solid ${COLORS.accent}44`, background:"transparent", color:COLORS.accent, cursor:"pointer", fontWeight:600, flexShrink:0 }}>
+                      ✏️ Edit Prefs
+                    </button>
+                  ) : (
+                    <div style={{ display:"flex", gap:8, flexShrink:0 }}>
+                      <button onClick={async () => {
+                        setFoodPrefsSaving(true); setFoodPrefsMsg("");
+                        try {
+                          await updateDoc(doc(db, "users", String(u.id)), { "profile_data.likedFoods": foodPrefsSelected });
+                          setFoodPrefsMsg("✅ Food preferences saved!");
+                          setEditingFoodPrefs(false);
+                          setTimeout(() => setFoodPrefsMsg(""), 2000);
+                        } catch(e) { setFoodPrefsMsg("❌ " + e.message); }
+                        setFoodPrefsSaving(false);
+                      }} disabled={foodPrefsSaving}
+                        style={{ fontSize:12, padding:"6px 14px", borderRadius:8, border:"none", background:COLORS.accent, color:"#07121f", cursor:"pointer", fontWeight:700 }}>
+                        {foodPrefsSaving ? "Saving…" : "💾 Save"}
+                      </button>
+                      <button onClick={() => { setEditingFoodPrefs(false); setFoodPrefsMsg(""); }}
+                        style={{ fontSize:12, padding:"6px 14px", borderRadius:8, border:`1px solid ${COLORS.border}`, background:"transparent", color:COLORS.muted, cursor:"pointer" }}>
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {foodPrefsMsg && <div style={{ fontSize:13, fontWeight:600, marginBottom:10, color: foodPrefsMsg.startsWith("✅") ? COLORS.success : COLORS.warn }}>{foodPrefsMsg}</div>}
+
+                {/* View mode — show selected foods per meal */}
+                {!editingFoodPrefs && (
+                  <div>
+                    {MEAL_KEYS.map(meal => {
+                      const foods = savedPrefs[meal] || [];
+                      return (
+                        <div key={meal} style={{ marginBottom:12, background:"rgba(255,255,255,0.02)", borderRadius:10, padding:"10px 14px", border:`1px solid ${COLORS.border}` }}>
+                          <div style={{ fontSize:12, fontWeight:700, color:COLORS.muted, marginBottom:6 }}>{meal.toUpperCase()}</div>
+                          {foods.length === 0 ? (
+                            <div style={{ fontSize:12, color:COLORS.muted, fontStyle:"italic" }}>No preferences set</div>
+                          ) : (
+                            <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
+                              {foods.map(f => (
+                                <span key={f} style={{ padding:"3px 10px", borderRadius:20, background:`${COLORS.accent}15`, color:COLORS.accent, fontSize:12, fontWeight:500 }}>{f}</span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {Object.values(savedPrefs).flat().length === 0 && (
+                      <div style={{ textAlign:"center", padding:"1rem", color:COLORS.muted, fontSize:13 }}>
+                        User hasn't selected food preferences yet. Click Edit Prefs to set them.
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Edit mode — use FoodMealPicker per meal */}
+                {editingFoodPrefs && (
+                  <div>
+                    {MEAL_KEYS.map(meal => (
+                      <div key={meal} style={{ marginBottom:16, background:"rgba(255,255,255,0.02)", borderRadius:12, padding:"12px 14px", border:`1px solid ${COLORS.border}` }}>
+                        <div style={{ fontSize:12, fontWeight:700, color:COLORS.accent, marginBottom:10 }}>{meal.toUpperCase()}</div>
+                        <FoodMealPicker
+                          mealKey={meal}
+                          foods={foodPrefsSelected}
+                          selectedFoods={foodPrefsSelected}
+                          setSelectedFoods={setFoodPrefsSelected}
+                          country={u.country || "India"}
+                          foodPref={p.foodPref || ""}
+                          COLORS={COLORS} S={S}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>
