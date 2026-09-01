@@ -7692,7 +7692,7 @@ function AdminPanel({ adminUsers, deleteUser, enableUser, approveUser, rejectUse
       </div>
 
       <div style={{ display:"flex", gap:6, marginBottom:16, overflowX:"auto", paddingBottom:4, scrollbarWidth:"none", alignItems:"center" }}>
-        {[["users","👥 Users"],["competitions","🏆 Challenges"],["feedback","💬 Feedback"],["broadcast","📢 Broadcast"]].map(([k,l]) => (
+        {[["users","👥 Users"],["competitions","🏆 Challenges"],["feedback","💬 Feedback"],["broadcast","📢 Broadcast"],["invite","📲 Invite"]].map(([k,l]) => (
           <button key={k} onClick={() => setAdminSection(k)}
             style={{ ...S.pill(adminSection===k), whiteSpace:"nowrap", flexShrink:0, fontSize:13 }}>
             {l}
@@ -7778,9 +7778,150 @@ function AdminPanel({ adminUsers, deleteUser, enableUser, approveUser, rejectUse
           <BroadcastHistory COLORS={COLORS} FONTS={FONTS} S={S} />
         </div>
       )}
+
+      {adminSection === "invite" && (
+        <AdminInviteTab COLORS={COLORS} FONTS={FONTS} S={S} allApproved={allApproved} />
+      )}
     </div>
   );
 }
+
+// ── AdminInviteTab — share app via WhatsApp ───────────────────────────────────
+const APP_URL = "https://stayfit-rho.vercel.app";
+const REGISTER_URL = `${APP_URL}/onboard`;
+
+function AdminInviteTab({ COLORS, FONTS, S, allApproved }) {
+  const defaultMsg = `Hi! 👋
+
+Join *StayFit* — your free AI-powered personal health & fitness coach! 🏋️‍♂️
+
+Here's what you get:
+✅ AI-generated personalised meal plans
+✅ Weight & body metrics tracking
+✅ Sleep, steps & calorie tracking
+✅ AI health insights & reports
+✅ Custom workout plans
+✅ Progress photo timeline
+✅ Group fitness challenges
+
+🌐 *Open App:* ${APP_URL}
+📋 *Register here:* ${REGISTER_URL}
+
+It's completely free. Sign up and your account will be activated shortly! 🚀`;
+
+  const [message, setMessage] = React.useState(defaultMsg);
+  const [phoneNo, setPhoneNo] = React.useState("");
+  const [copied, setCopied] = React.useState(false);
+
+  const shareLink = phoneNo.trim()
+    ? `https://wa.me/${phoneNo.replace(/\D/g,"")}?text=${encodeURIComponent(message)}`
+    : `https://wa.me/?text=${encodeURIComponent(message)}`;
+
+  const copyLink = () => {
+    navigator.clipboard.writeText(shareLink).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
+  };
+
+  const copyMsg = () => {
+    navigator.clipboard.writeText(message).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
+  };
+
+  return (
+    <div>
+      <div style={{ fontFamily:FONTS.head, fontSize:18, fontWeight:700, marginBottom:4 }}>📲 Invite via WhatsApp</div>
+      <div style={{ fontSize:13, color:COLORS.muted, marginBottom:20 }}>
+        Share the app with new users. Customise the message, then open WhatsApp directly.
+      </div>
+
+      {/* Quick share cards */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))", gap:10, marginBottom:20 }}>
+        {[
+          { label:"App Homepage", url:APP_URL, icon:"🌐", desc:"Landing page" },
+          { label:"Registration Link", url:REGISTER_URL, icon:"📋", desc:"New user signup" },
+        ].map(({ label, url, icon, desc }) => (
+          <div key={label} style={{ ...S.metricCard, display:"flex", flexDirection:"column", gap:6 }}>
+            <div style={{ display:"flex", gap:10, alignItems:"center" }}>
+              <span style={{ fontSize:22 }}>{icon}</span>
+              <div>
+                <div style={{ fontWeight:700, fontSize:13, color:COLORS.text }}>{label}</div>
+                <div style={{ fontSize:11, color:COLORS.muted }}>{desc}</div>
+              </div>
+            </div>
+            <div style={{ fontSize:11, color:COLORS.accent, fontFamily:"monospace", wordBreak:"break-all", background:`${COLORS.accent}0a`, padding:"6px 10px", borderRadius:8 }}>{url}</div>
+            <div style={{ display:"flex", gap:6 }}>
+              <button onClick={() => navigator.clipboard.writeText(url).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); })}
+                style={{ ...S.btnSm, flex:1, fontSize:12, padding:"6px 10px", color:COLORS.accent, borderColor:`${COLORS.accent}44` }}>
+                📋 Copy Link
+              </button>
+              <a href={`https://wa.me/?text=${encodeURIComponent(`${icon} *${label}*\n${url}`)}`} target="_blank" rel="noreferrer"
+                style={{ ...S.btnSm, flex:1, fontSize:12, padding:"6px 10px", color:"#25D366", borderColor:"#25D36644", textDecoration:"none", display:"flex", alignItems:"center", justifyContent:"center", gap:4, borderRadius:8, border:"1px solid #25D36644", background:"transparent", cursor:"pointer" }}>
+                🟢 Share
+              </a>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Full invite message composer */}
+      <div style={{ ...S.metricCard, marginBottom:16 }}>
+        <div style={{ fontWeight:700, fontSize:14, color:COLORS.text, marginBottom:12 }}>✉️ Compose Invite Message</div>
+
+        <div style={{ marginBottom:12 }}>
+          <label style={S.label}>Phone Number (optional — leave blank for generic link)</label>
+          <input type="tel" value={phoneNo} onChange={e => setPhoneNo(e.target.value)}
+            placeholder="e.g. 919876543210 (country code + number, no spaces)"
+            style={{ ...S.input, fontSize:13 }} />
+          <div style={{ fontSize:11, color:COLORS.muted, marginTop:4 }}>Include country code without + (India = 91…)</div>
+        </div>
+
+        <div style={{ marginBottom:14 }}>
+          <label style={S.label}>Message</label>
+          <textarea rows={12} value={message} onChange={e => setMessage(e.target.value)}
+            style={{ ...S.input, resize:"vertical", fontSize:13, lineHeight:1.6, fontFamily:"'Inter', monospace" }} />
+          <div style={{ fontSize:11, color:COLORS.muted, marginTop:4 }}>{message.length} characters · WhatsApp max is 65,536</div>
+        </div>
+
+        <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+          <a href={shareLink} target="_blank" rel="noreferrer"
+            style={{ flex:1, minWidth:160, padding:"12px 20px", borderRadius:12, background:"#25D366", border:"none",
+              color:"#fff", fontWeight:800, fontSize:14, cursor:"pointer", textDecoration:"none",
+              display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
+            🟢 Open WhatsApp
+          </a>
+          <button onClick={copyMsg}
+            style={{ ...S.btnSm, flex:1, minWidth:140, padding:"12px 20px", fontSize:13 }}>
+            {copied ? "✅ Copied!" : "📋 Copy Message"}
+          </button>
+          <button onClick={copyLink}
+            style={{ ...S.btnSm, flex:1, minWidth:140, padding:"12px 20px", fontSize:13, color:COLORS.accent, borderColor:`${COLORS.accent}44` }}>
+            🔗 Copy WA Link
+          </button>
+        </div>
+        <div style={{ fontSize:11, color:COLORS.muted, marginTop:10 }}>
+          "Open WhatsApp" opens the WhatsApp app{phoneNo.trim() ? ` and starts a chat with +${phoneNo.replace(/\D/g,"")}` : " with no pre-selected contact — you can choose who to send it to"}.
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div style={{ ...S.metricCard, background:`${COLORS.accent}06`, border:`1px solid ${COLORS.accent}22` }}>
+        <div style={{ fontWeight:700, fontSize:13, color:COLORS.accent, marginBottom:10 }}>📊 App Stats to Share</div>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:10 }}>
+          {[
+            ["👥 Registered Users", allApproved.length],
+            ["🌐 App URL", APP_URL],
+            ["📱 Works on", "Mobile & Desktop"],
+            ["💰 Price", "Completely Free"],
+          ].map(([l,v]) => (
+            <div key={l} style={{ background:"rgba(255,255,255,0.04)", borderRadius:8, padding:"8px 14px", flex:1, minWidth:140 }}>
+              <div style={{ fontSize:10, color:COLORS.muted, fontWeight:700, marginBottom:2 }}>{l}</div>
+              <div style={{ fontSize:13, fontWeight:700, color:COLORS.text }}>{v}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── AdminCompetitions — create & manage challenges ────────────────────────────
 
 // ── AdminCompetitions ──

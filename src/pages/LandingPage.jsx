@@ -191,6 +191,14 @@ export default function LandingPage({ isDark, C, S, navigate }) {
 
       {/* Footer */}
       <footer style={{ padding: '28px 24px', borderTop: `1px solid ${C.border}`, textAlign: 'center', color: C.muted, fontSize: 13 }}>
+        <div style={{ marginBottom: 14 }}>
+          <a
+            href={`https://wa.me/?text=${encodeURIComponent('Hi! 👋\n\nJoin *StayFit* — your free AI-powered health & fitness coach! 🏋️‍♂️\n\n✅ AI meal plans\n✅ Weight & progress tracking\n✅ Sleep, steps & calorie tracking\n✅ AI health insights\n✅ Custom workout plans\n\n🌐 *Open App:* https://stayfit-rho.vercel.app\n📋 *Register:* https://stayfit-rho.vercel.app/onboard\n\nFree forever. Sign up and get activated! 🚀')}`}
+            target="_blank" rel="noreferrer"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 22px', borderRadius: 24, background: '#25D366', color: '#fff', fontWeight: 700, fontSize: 14, textDecoration: 'none' }}>
+            🟢 Share StayFit on WhatsApp
+          </a>
+        </div>
         © 2026 StayFit — Stay consistent. Stay fit.
       </footer>
     </div>
