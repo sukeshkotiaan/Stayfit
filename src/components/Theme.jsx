@@ -2,47 +2,50 @@ import React from 'react';
 
 const THEME_STORAGE_KEY = "stayfit_theme_v1";
 
+// ── Design Tokens ─────────────────────────────────────────────────────────────
+// Palette: Deep navy dark / clean white light, emerald accent, amber highlight
+// Feel: Premium wellness app — modern, fresh, trusted, friendly
+
 const COLORS_DARK = {
-  bg: "#0a0a0a", // Deep OLED black
-  card: "#121212", // Elevated dark
-  card2: "#1a1a1a",
-  card3: "#222222",
-  border: "rgba(255,255,255,0.08)",
-  accent: "#DFFF00", // High-visibility chartreuse/neon lime
-  accent2: "#A5FF00",
-  accent3: "#FFFFFF",
-  warn: "#FF3366",
-  text: "#FFFFFF",
-  muted: "#888888",
-  success: "#DFFF00",
-  purple: "#888888", // Removed purple, mapped to neutral
-  gold: "#FFD700",
-  glass: "#121212", // Replaced glass with solid flat for premium feel
-  glassBorder: "rgba(255, 255, 255, 0.08)",
-  glassHighlight: "rgba(255, 255, 255, 0.02)",
-  mesh1: "#0a0a0a",
-  mesh2: "#0a0a0a",
-  mesh3: "#0a0a0a",
+  bg:             "#0F172A",  // Deep navy-slate (feels rich, not flat-black)
+  card:           "#1E293B",  // Elevated card
+  card2:          "#334155",  // Nested / secondary
+  card3:          "#475569",  // Subtle dividers, chips
+  border:         "rgba(148,163,184,0.12)",
+  accent:         "#10B981",  // Emerald green — health, growth, vitality
+  accent2:        "#34D399",  // Lighter emerald for highlights
+  accent3:        "#F59E0B",  // Amber — goals, warnings, highlights
+  warn:           "#F87171",  // Soft red
+  text:           "#F1F5F9",  // Near-white, easy on eyes
+  muted:          "#94A3B8",  // Slate-400
+  success:        "#10B981",  // Alias accent
+  purple:         "#818CF8",  // Indigo, variety
+  gold:           "#FBBF24",  // Gold for streaks/badges
+  glass:          "#1E293B",
+  glassBorder:    "rgba(148,163,184,0.12)",
+  glassHighlight: "rgba(255,255,255,0.03)",
+  mesh1: "#0F172A", mesh2: "#0F172A", mesh3: "#0F172A",
 };
 
 const COLORS_LIGHT = {
-  ...COLORS_DARK,
-  bg: "#F9FAFB",
-  card: "#FFFFFF",
-  card2: "#F3F4F6",
-  card3: "#E5E7EB",
-  border: "rgba(0, 0, 0, 0.06)",
-  text: "#111827",
-  muted: "#6B7280",
-  accent: "#111827", // Stark black on white for premium look
-  accent2: "#374151",
-  success: "#10B981",
-  glass: "#FFFFFF",
-  glassBorder: "rgba(0, 0, 0, 0.06)",
-  glassHighlight: "rgba(255, 255, 255, 1)",
-  mesh1: "#F9FAFB",
-  mesh2: "#F9FAFB",
-  mesh3: "#F9FAFB",
+  bg:             "#F8FAFC",  // Cool near-white
+  card:           "#FFFFFF",
+  card2:          "#F1F5F9",  // Slate-100
+  card3:          "#E2E8F0",  // Slate-200
+  border:         "rgba(15,23,42,0.07)",
+  accent:         "#059669",  // Emerald-600 (darker = readable on white)
+  accent2:        "#10B981",  // Emerald-500
+  accent3:        "#D97706",  // Amber-600
+  warn:           "#DC2626",  // Red-600
+  text:           "#0F172A",  // Near-black
+  muted:          "#64748B",  // Slate-500
+  success:        "#059669",
+  purple:         "#4F46E5",  // Indigo-600
+  gold:           "#D97706",
+  glass:          "#FFFFFF",
+  glassBorder:    "rgba(15,23,42,0.07)",
+  glassHighlight: "rgba(255,255,255,1)",
+  mesh1: "#F8FAFC", mesh2: "#F8FAFC", mesh3: "#F8FAFC",
 };
 
 function resolveIsDark(themeMode) {
@@ -63,7 +66,7 @@ function loadStoredTheme() {
     const v = localStorage.getItem(THEME_STORAGE_KEY);
     if (v === "dark" || v === "light" || v === "system") return v;
   } catch (_) {}
-  return "dark"; // Default to dark for fitness
+  return "dark";
 }
 
 function saveTheme(themeMode) {
@@ -81,18 +84,25 @@ function applyCssVars(C, isDark) {
 }
 
 function buildStyles(C, isDark) {
+  const shadow = isDark
+    ? "0 1px 3px rgba(0,0,0,0.4)"
+    : "0 1px 3px rgba(15,23,42,0.06), 0 1px 2px rgba(15,23,42,0.04)";
+  const shadowMd = isDark
+    ? "0 4px 16px rgba(0,0,0,0.5)"
+    : "0 4px 16px rgba(15,23,42,0.08)";
+
   const cardBase = {
     background: C.card,
     border: `1px solid ${C.border}`,
-    boxShadow: isDark ? "none" : "0 2px 8px rgba(0,0,0,0.02)",
+    boxShadow: shadow,
   };
 
   return {
-    glass: cardBase, // Keeping the key 'glass' to not break App.jsx, but it's flat now
+    glass: cardBase,
     app: {
       minHeight: "100vh",
       background: C.bg,
-      fontFamily: "'Inter', sans-serif",
+      fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
       color: C.text,
       display: "flex",
       flexDirection: "column",
@@ -106,109 +116,116 @@ function buildStyles(C, isDark) {
       justifyContent: "center",
       flex: 1,
       minHeight: "100vh",
-      padding: "1rem",
+      padding: "1.25rem",
       position: "relative",
       zIndex: 1,
     },
     card: {
       ...cardBase,
-      borderRadius: 16,
+      borderRadius: 20,
       padding: "2rem",
       width: "100%",
       maxWidth: 440,
     },
     input: {
       width: "100%",
-      background: C.bg,
+      background: isDark ? "rgba(255,255,255,0.04)" : C.card2,
       border: `1px solid ${C.border}`,
-      borderRadius: 8,
-      padding: "12px 16px",
+      borderRadius: 10,
+      padding: "13px 16px",
       color: C.text,
       fontSize: 15,
-      fontFamily: "'Inter', sans-serif",
+      fontFamily: "inherit",
       outline: "none",
       boxSizing: "border-box",
-      transition: "border-color 0.2s",
+      transition: "border-color 0.2s, box-shadow 0.2s",
+      lineHeight: 1.4,
     },
     select: {
       width: "100%",
-      background: C.bg,
+      background: isDark ? "rgba(255,255,255,0.04)" : C.card2,
       border: `1px solid ${C.border}`,
-      borderRadius: 8,
-      padding: "12px 16px",
+      borderRadius: 10,
+      padding: "13px 16px",
       color: C.text,
       fontSize: 15,
-      fontFamily: "'Inter', sans-serif",
+      fontFamily: "inherit",
       outline: "none",
+      appearance: "none",
+      cursor: "pointer",
     },
     btn: {
       background: C.accent,
       border: "none",
-      borderRadius: 8,
-      padding: "14px 28px",
-      color: isDark ? "#000000" : "#FFFFFF",
-      fontWeight: 600,
+      borderRadius: 12,
+      padding: "15px 28px",
+      color: "#FFFFFF",
+      fontWeight: 700,
       fontSize: 15,
       cursor: "pointer",
       width: "100%",
-      fontFamily: "'Inter', sans-serif",
+      fontFamily: "inherit",
       letterSpacing: "0.01em",
-      transition: "opacity 0.2s",
+      transition: "opacity 0.15s, transform 0.1s",
+      boxShadow: isDark ? `0 0 0 0 ${C.accent}` : `0 2px 8px ${C.accent}44`,
     },
     btnSm: {
-      background: C.card2,
+      background: isDark ? "rgba(255,255,255,0.06)" : C.card2,
       border: `1px solid ${C.border}`,
-      borderRadius: 6,
-      padding: "8px 16px",
+      borderRadius: 8,
+      padding: "7px 14px",
       color: C.text,
       fontSize: 13,
       fontWeight: 500,
       cursor: "pointer",
-      fontFamily: "'Inter', sans-serif",
+      fontFamily: "inherit",
       transition: "all 0.15s",
     },
     btnDanger: {
       background: "transparent",
-      border: `1px solid ${C.warn}40`,
-      borderRadius: 6,
-      padding: "8px 16px",
+      border: `1px solid ${C.warn}50`,
+      borderRadius: 8,
+      padding: "7px 14px",
       color: C.warn,
       fontSize: 13,
       cursor: "pointer",
-      fontFamily: "'Inter', sans-serif",
+      fontFamily: "inherit",
     },
     label: {
-      fontSize: 13,
+      fontSize: 12,
       color: C.muted,
-      marginBottom: 8,
+      marginBottom: 7,
       display: "block",
-      fontWeight: 500,
-      letterSpacing: "0.01em",
+      fontWeight: 600,
+      letterSpacing: "0.04em",
       textTransform: "uppercase",
     },
     row: { display: "flex", gap: 12, alignItems: "center" },
     metricCard: {
       ...cardBase,
-      borderRadius: 12,
-      padding: "16px 20px",
+      borderRadius: 16,
+      padding: "16px 18px",
     },
     nav: {
-      ...cardBase,
+      background: C.card,
+      borderBottom: `1px solid ${C.border}`,
       borderRadius: 0,
-      borderTop: "none",
-      borderLeft: "none",
-      borderRight: "none",
-      padding: "14px 28px",
+      padding: "12px 16px",
       display: "flex",
       justifyContent: "space-between",
       alignItems: "center",
       position: "sticky",
       top: 0,
       zIndex: 100,
+      backdropFilter: "blur(12px)",
+      WebkitBackdropFilter: "blur(12px)",
+      boxShadow: isDark ? "none" : "0 1px 0 rgba(15,23,42,0.05)",
     },
     bottomNav: {
-      background: C.card,
+      background: isDark ? "rgba(15,23,42,0.96)" : "rgba(255,255,255,0.96)",
       borderTop: `1px solid ${C.border}`,
+      backdropFilter: "blur(16px)",
+      WebkitBackdropFilter: "blur(16px)",
       position: "fixed",
       bottom: 0,
       left: 0,
@@ -216,37 +233,38 @@ function buildStyles(C, isDark) {
       display: "flex",
       zIndex: 1000,
       paddingBottom: "env(safe-area-inset-bottom, 0px)",
+      boxShadow: isDark ? "0 -1px 0 rgba(148,163,184,0.06)" : "0 -1px 0 rgba(15,23,42,0.06)",
     },
     drawer: {
       background: C.card,
       borderTop: `1px solid ${C.border}`,
-      borderRadius: "16px 16px 0 0",
+      borderRadius: "20px 20px 0 0",
       position: "fixed",
       bottom: 0,
       left: 0,
       right: 0,
       zIndex: 1002,
-      padding: "16px",
-      paddingBottom: "calc(20px + env(safe-area-inset-bottom, 0px))",
-      boxShadow: isDark ? "0 -4px 24px rgba(0,0,0,0.5)" : "0 -4px 24px rgba(0,0,0,0.05)",
+      padding: "20px 16px",
+      paddingBottom: "calc(24px + env(safe-area-inset-bottom, 0px))",
+      boxShadow: isDark ? "0 -8px 40px rgba(0,0,0,0.6)" : "0 -8px 40px rgba(15,23,42,0.1)",
     },
     modal: {
       ...cardBase,
-      borderRadius: 16,
+      borderRadius: 20,
       padding: 24,
       maxWidth: 380,
       width: "100%",
     },
     pill: (active) => ({
-      padding: "8px 20px",
-      borderRadius: 22,
+      padding: "9px 20px",
+      borderRadius: 24,
       border: active ? "none" : `1px solid ${C.border}`,
-      background: active ? C.text : C.bg,
-      color: active ? C.bg : C.text,
+      background: active ? C.accent : "transparent",
+      color: active ? "#FFFFFF" : C.muted,
       cursor: "pointer",
-      fontSize: 13,
-      fontFamily: "'Inter', sans-serif",
-      fontWeight: 500,
+      fontSize: 14,
+      fontFamily: "inherit",
+      fontWeight: active ? 700 : 500,
       transition: "all 0.18s",
     }),
     tabPanel: {
@@ -256,22 +274,34 @@ function buildStyles(C, isDark) {
 }
 
 function globalStylesCss(isDark) {
-  const optBg = isDark ? "#121212" : "#ffffff";
-  const optColor = isDark ? "#ffffff" : "#111827";
+  const optBg = isDark ? "#1E293B" : "#ffffff";
+  const optColor = isDark ? "#F1F5F9" : "#0F172A";
+  const accentColor = isDark ? "#10B981" : "#059669";
   return `
     * { box-sizing: border-box; }
-    ::-webkit-scrollbar { display: none; } /* Clean, app-like feel */
+    ::-webkit-scrollbar { display: none; }
     input[type=number]::-webkit-inner-spin-button { display: none; }
     select option { background: ${optBg}; color: ${optColor}; }
-    @keyframes sfFadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes sfFadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
     @keyframes sfShimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+    @keyframes sfPulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
     .sf-fade-in { animation: sfFadeIn 0.25s ease forwards; }
+    .sf-tab-panel { animation: sfFadeIn 0.22s ease forwards; }
     .sf-skeleton {
-      background: linear-gradient(90deg, ${isDark ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)"} 25%, ${isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)"} 50%, ${isDark ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)"} 75%);
+      background: linear-gradient(90deg,
+        ${isDark ? "rgba(255,255,255,0.03)" : "rgba(15,23,42,0.04)"} 25%,
+        ${isDark ? "rgba(255,255,255,0.07)" : "rgba(15,23,42,0.08)"} 50%,
+        ${isDark ? "rgba(255,255,255,0.03)" : "rgba(15,23,42,0.04)"} 75%);
       background-size: 200% 100%;
-      animation: sfShimmer 1.4s ease infinite;
-      border-radius: 4px;
+      animation: sfShimmer 1.5s ease infinite;
+      border-radius: 8px;
     }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: ${accentColor}66 !important;
+      box-shadow: 0 0 0 3px ${accentColor}18 !important;
+    }
+    button:active { opacity: 0.82; transform: scale(0.97); }
   `;
 }
 
@@ -280,7 +310,6 @@ function GlobalStyles({ isDark }) {
 }
 
 function MeshBackground({ C, isDark }) {
-  // Removed animated gradient meshes to align with modern minimal guidelines
   return <div aria-hidden style={{ position: "fixed", inset: 0, zIndex: 0, background: C.bg }} />;
 }
 
@@ -292,8 +321,8 @@ function ThemePicker({ themeMode, setThemeMode, COLORS, S, FONTS }) {
   ];
   return (
     <div style={{ ...S.metricCard, marginBottom: 16 }}>
-      <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Theme</div>
-      <div style={{ fontSize: 13, color: COLORS.muted, marginBottom: 16 }}>Interface appearance</div>
+      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 2, color: COLORS.text }}>Appearance</div>
+      <div style={{ fontSize: 13, color: COLORS.muted, marginBottom: 14 }}>Interface theme</div>
       <div style={{ display: "flex", gap: 8 }}>
         {options.map(({ id, label, icon }) => (
           <button
@@ -311,7 +340,7 @@ function ThemePicker({ themeMode, setThemeMode, COLORS, S, FONTS }) {
             }}
           >
             <span style={{ fontSize: 16 }}>{icon}</span>
-            <span>{label}</span>
+            <span style={{ fontSize: 13 }}>{label}</span>
           </button>
         ))}
       </div>

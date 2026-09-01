@@ -4611,10 +4611,10 @@ function FeedbackButton({ currentUser, notify, COLORS, FONTS, S }) {
     <>
       {/* Floating button */}
       <button onClick={() => setOpen(o => !o)}
-        style={{ position:"fixed", bottom:"calc(72px + env(safe-area-inset-bottom, 0px) + 12px)", right:16, zIndex:999,
-          width:44, height:44, borderRadius:"50%",
-          background:`linear-gradient(135deg,${COLORS.accent2},${COLORS.accent})`,
-          border:"none", boxShadow:`0 4px 16px ${COLORS.accent2}55`,
+        style={{ position:"fixed", bottom:"calc(72px + env(safe-area-inset-bottom, 0px) + 14px)", right:16, zIndex:999,
+          width:46, height:46, borderRadius:"50%",
+          background: COLORS.accent,
+          border:"none", boxShadow:`0 4px 20px ${COLORS.accent}50`,
           cursor:"pointer", display:"flex", alignItems:"center",
           justifyContent:"center", fontSize:20,
           transition:"transform 0.2s",
@@ -4624,10 +4624,10 @@ function FeedbackButton({ currentUser, notify, COLORS, FONTS, S }) {
 
       {/* Popup */}
       {open && (
-        <div style={{ position:"fixed", bottom:"calc(72px + env(safe-area-inset-bottom, 0px) + 64px)", right:16, zIndex:999,
-          width:300, background:COLORS.card, borderRadius:16, padding:18,
+        <div style={{ position:"fixed", bottom:"calc(72px + env(safe-area-inset-bottom, 0px) + 70px)", right:16, zIndex:999,
+          width:300, background:COLORS.card, borderRadius:18, padding:18,
           border:`1px solid ${COLORS.border}`,
-          boxShadow:`0 8px 32px rgba(0,0,0,0.4)` }}>
+          boxShadow:`0 8px 40px rgba(0,0,0,0.35)` }}>
 
           {sent ? (
             <div style={{ textAlign:"center", padding:"1rem" }}>
@@ -10178,13 +10178,15 @@ function App() {
         <GlobalStyles isDark={isDark} />
         <MeshBackground C={C} isDark={isDark} />
         {notification && (
-          <div style={{ position: "fixed", top: 20, right: 20, zIndex: 9999, maxWidth: 320,
+          <div style={{ position: "fixed", top: 16, right: 16, left: 16, zIndex: 9999, maxWidth: 380, margin:"0 auto",
             background: notification.startsWith("⚠") || notification.startsWith("Error") ? COLORS.warn :
                         notification.startsWith("✓") || notification.toLowerCase().includes("saved") || notification.toLowerCase().includes("success") ? COLORS.success :
-                        COLORS.accent,
-            color: "#fff", padding: "12px 20px", borderRadius: 12, fontWeight: 600, fontSize: 14,
-            boxShadow: "0 8px 24px rgba(0,0,0,0.4)", display: "flex", alignItems: "center", gap: 10,
-            animation: "sfSlideIn 0.3s ease",
+                        COLORS.card,
+            color: notification.startsWith("⚠")||notification.startsWith("Error")||notification.startsWith("✓")||notification.toLowerCase().includes("saved")||notification.toLowerCase().includes("success") ? "#fff" : COLORS.text,
+            padding: "12px 18px", borderRadius: 14, fontWeight: 600, fontSize: 14,
+            boxShadow: "0 4px 24px rgba(0,0,0,0.3)", display: "flex", alignItems: "center", gap: 10,
+            border: `1px solid ${COLORS.border}`,
+            animation: "sfFadeIn 0.25s ease",
           }}>
             {notification}
           </div>
@@ -10228,18 +10230,18 @@ function App() {
           );
         })()}
 
-        <nav style={{ ...S.nav, padding:"10px 14px", position:"sticky", zIndex:100 }}>
-          <div style={{ display:"flex", alignItems:"center", gap:8, minWidth:0 }}>
-            <img src={LOGO_SRC} alt="VitaTrack" style={{ height:32, width:"auto", objectFit:"contain", flexShrink:0 }} />
+        <nav style={{ ...S.nav }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10, minWidth:0 }}>
+            <img src={LOGO_SRC} alt="StayFit" style={{ height:34, width:"auto", objectFit:"contain", flexShrink:0 }} />
             {metrics && (
               <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
-                <span style={{ fontSize:10, padding:"3px 8px", borderRadius:20, fontWeight:700,
-                  background:`${COLORS.success}18`, color:COLORS.success, border:`1px solid ${COLORS.success}30`, whiteSpace:"nowrap" }}>
+                <span style={{ fontSize:11, padding:"3px 10px", borderRadius:20, fontWeight:700,
+                  background:`${COLORS.success}20`, color:COLORS.success, border:`1px solid ${COLORS.success}35`, whiteSpace:"nowrap" }}>
                   ✦ {healthScore(metrics)}
                 </span>
                 {calcStreak(userLogs) > 0 && (
-                  <span style={{ fontSize:10, padding:"3px 8px", borderRadius:20, fontWeight:700,
-                    background:"rgba(249,115,22,0.12)", color:"#fb923c", border:"1px solid rgba(249,115,22,0.25)", whiteSpace:"nowrap" }}>
+                  <span style={{ fontSize:11, padding:"3px 10px", borderRadius:20, fontWeight:700,
+                    background:"rgba(251,146,60,0.15)", color:"#fb923c", border:"1px solid rgba(251,146,60,0.3)", whiteSpace:"nowrap" }}>
                     🔥 {calcStreak(userLogs)}d
                   </span>
                 )}
@@ -10247,47 +10249,45 @@ function App() {
             )}
           </div>
           <div style={{ display:"flex", gap:6, alignItems:"center", flexShrink:0 }}>
-            <div style={{ fontSize:12, color:COLORS.muted, fontWeight:500, whiteSpace:"nowrap" }}>
-              Hi, <span style={{ color:COLORS.text, fontWeight:600 }}>{currentUser.name?.split(" ")[0]}</span> 👋
+            <div style={{ fontSize:13, color:COLORS.muted, fontWeight:500, whiteSpace:"nowrap" }}>
+              Hi, <span style={{ color:COLORS.text, fontWeight:700 }}>{currentUser.name?.split(" ")[0]}</span>
             </div>
             {currentUser.role === "admin" && (
-              <button style={{ ...S.btnSm, color:COLORS.accent, borderColor:`${COLORS.accent}44`, padding:"5px 10px", fontSize:12 }}
-                onClick={() => setScreen("admin")}>
+              <button style={{ ...S.btnSm, color:COLORS.accent, borderColor:`${COLORS.accent}44`, padding:"6px 11px", fontSize:14, borderRadius:8 }}
+                onClick={() => setScreen("admin")} title="Admin Panel">
                 🛡
               </button>
             )}
-            {/* Translate button */}
             <button onClick={() => setShowTranslate(t => !t)}
-              style={{ ...S.btnSm, padding:"5px 10px", fontSize:13 }}
-              title="Translate to Hindi, Marathi, Tamil, Kannada...">
+              style={{ ...S.btnSm, padding:"6px 11px", fontSize:14, borderRadius:8 }}
+              title="Translate">
               🌐
             </button>
             <button onClick={() => setThemeMode(m => m === "dark" ? "light" : m === "light" ? "system" : "dark")}
-              style={{ ...S.btnSm, padding:"5px 10px", fontSize:14 }}
-              title={`Theme: ${themeMode} (tap to cycle)`}>
+              style={{ ...S.btnSm, padding:"6px 11px", fontSize:14, borderRadius:8 }}
+              title={`Theme: ${themeMode}`}>
               {themeMode === "light" ? "☀️" : themeMode === "system" ? "💻" : "🌙"}
             </button>
-            <button style={{ ...S.btnSm, padding:"5px 10px", fontSize:12 }}
+            <button style={{ ...S.btnSm, padding:"6px 12px", fontSize:12, borderRadius:8, color:COLORS.muted }}
               onClick={() => { if(window.confirm("Sign out?")) logout(); }}>
               Exit
             </button>
           </div>
         </nav>
-        <div style={{ maxWidth:900, margin:"0 auto", padding:"12px 12px", width:"100%", position:"relative", zIndex:1 }}>
+        <div style={{ maxWidth:900, margin:"0 auto", padding:"16px 14px", width:"100%", position:"relative", zIndex:1 }}>
           {/* Incomplete profile banner */}
           {(!profile.weight || !profile.height || !profile.age) && (
-            <div style={{ background: `${COLORS.accent3}18`, border: `1px solid ${COLORS.accent3}44`, borderRadius: 12, padding: "14px 18px", marginBottom: 16, display: "flex", gap: 14, alignItems: "center" }}>
-              <span style={{ fontSize: 28, flexShrink: 0 }}>⚠️</span>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 700, fontSize: 14, color: COLORS.accent3, marginBottom: 3 }}>Complete your profile for accurate metrics</div>
-                <div style={{ fontSize: 13, color: COLORS.muted }}>
-                  Missing: {[!profile.weight && "Weight", !profile.height && "Height", !profile.age && "Age"].filter(Boolean).join(", ")}.
-                  Body metrics, calorie targets and health score need this data.
+            <div style={{ background: `${COLORS.accent3}14`, border: `1px solid ${COLORS.accent3}40`, borderRadius: 16, padding: "16px 18px", marginBottom: 18, display: "flex", gap: 14, alignItems: "center" }}>
+              <span style={{ fontSize: 26, flexShrink: 0 }}>📋</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, color: COLORS.accent3, marginBottom: 2 }}>Finish your profile</div>
+                <div style={{ fontSize: 12, color: COLORS.muted, lineHeight: 1.5 }}>
+                  Missing: {[!profile.weight && "Weight", !profile.height && "Height", !profile.age && "Age"].filter(Boolean).join(", ")} — needed for accurate metrics.
                 </div>
               </div>
               <button onClick={() => setDashTab("settings")}
-                style={{ background: COLORS.accent3, border: "none", borderRadius: 8, padding: "8px 16px", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>
-                Complete →
+                style={{ background: COLORS.accent3, border: "none", borderRadius: 10, padding: "9px 16px", color: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>
+                Complete
               </button>
             </div>
           )}
@@ -10311,11 +10311,11 @@ function App() {
                 const dotEmpty = isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.1)";
                 return (
                   <div style={{ marginBottom: "1.5rem" }}>
-                    <div style={{ ...S.metricCard, background: `linear-gradient(135deg, ${COLORS.accent}18, ${COLORS.accent2}18)`, border: `1px solid ${COLORS.accent}30`, marginBottom: 12, display: "flex", gap: 12, alignItems: "center" }}>
-                      <span style={{ fontSize: 22, flexShrink: 0 }}>💬</span>
+                    <div style={{ ...S.metricCard, background: isDark ? `linear-gradient(135deg, ${COLORS.accent}12, ${COLORS.accent2}08)` : `linear-gradient(135deg, ${COLORS.accent}10, ${COLORS.accent2}06)`, border: `1px solid ${COLORS.accent}25`, marginBottom: 14, display: "flex", gap: 14, alignItems: "flex-start", padding:"16px 18px" }}>
+                      <span style={{ fontSize: 24, flexShrink: 0, marginTop:1 }}>✨</span>
                       <div>
-                        <div style={{ fontSize: 13, color: COLORS.text, fontStyle: "italic", lineHeight: 1.5 }}>"{quote.text}"</div>
-                        <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 3 }}>— {quote.author}</div>
+                        <div style={{ fontSize: 14, color: COLORS.text, fontStyle: "italic", lineHeight: 1.6, fontWeight:400 }}>"{quote.text}"</div>
+                        <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 4 }}>— {quote.author}</div>
                       </div>
                     </div>
                     <div style={{ display:"grid", gridTemplateColumns:"repeat(2, 1fr)", gap:10 }}>
@@ -10467,10 +10467,10 @@ function App() {
               })()}
 
               {/* Log Weight Bar */}
-              <div style={{ ...S.metricCard, marginBottom: "1rem", background: `${COLORS.accent}11`, border: `1px solid ${COLORS.accent}33` }}>
-                <div style={{ fontFamily: FONTS.head, fontSize: 13, fontWeight: 700, color: COLORS.accent, marginBottom: 10 }}>
-                  ⚖️ Log Today's Weight
-                  {latestLog && <span style={{ fontSize: 12, fontWeight: 400, color: COLORS.muted, marginLeft: 10 }}>Last: <b style={{ color: COLORS.text }}>{latestLog.weight} kg</b> · {latestLog.date}</span>}
+              <div style={{ ...S.metricCard, marginBottom: "1rem", background: `${COLORS.accent}10`, border: `1px solid ${COLORS.accent}28`, borderRadius:16 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.accent, marginBottom: 10, display:"flex", alignItems:"center", gap:6 }}>
+                  <span>⚖️</span> Log Today's Weight
+                  {latestLog && <span style={{ fontSize: 12, fontWeight: 400, color: COLORS.muted, marginLeft: 4 }}>· Last: <b style={{ color: COLORS.text }}>{latestLog.weight} kg</b></span>}
                 </div>
                 <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                   <div style={{ display: "flex", gap: 4 }}>
@@ -10511,11 +10511,11 @@ function App() {
                 const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
                 const today = new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" });
                 return (
-                  <div style={{ marginBottom: 16 }}>
-                    <div style={{ fontFamily: FONTS.head, fontSize: 20, fontWeight: 700 }}>
+                  <div style={{ marginBottom: 18 }}>
+                    <div style={{ fontSize: 22, fontWeight: 800, letterSpacing:"-0.02em", color: COLORS.text }}>
                       {greeting}, {currentUser.name?.split(" ")[0]} 👋
                     </div>
-                    <div style={{ fontSize: 13, color: COLORS.muted, marginTop: 2 }}>{today}</div>
+                    <div style={{ fontSize: 13, color: COLORS.muted, marginTop: 3, fontWeight:400 }}>{today}</div>
                   </div>
                 );
               })()}
@@ -10529,44 +10529,44 @@ function App() {
                   return (
                     <div style={{ display: "flex", gap: 8, flex: 1, flexWrap: "wrap" }}>
                       {[
-                        { label: "Calorie Target", val: `${target} kcal`, color: COLORS.accent, tip: isLose ? "500 kcal deficit" : "maintenance" },
-                        { label: "Protein Goal", val: `${metrics.protein}g`, color: COLORS.accent2, tip: "1.6g per kg" },
-                        { label: "Water Goal", val: `${dailyWater}L`, color: COLORS.accent2, tip: "33ml per kg" },
-                      ].map(({ label, val, color, tip }) => (
-                        <div key={label} style={{ background: `${color}12`, border: `1px solid ${color}30`, borderRadius: 10, padding: "8px 14px", flex: 1, minWidth: 100 }}>
-                          <div style={{ fontSize: 10, color: COLORS.muted, fontWeight: 600 }}>{label.toUpperCase()}</div>
-                          <div style={{ fontSize: 16, fontWeight: 700, color }}>{val}</div>
-                          <div style={{ fontSize: 10, color: COLORS.muted }}>{tip}</div>
+                        { label: "Calories", val: `${target}`, unit:"kcal", color: COLORS.accent, tip: isLose ? "deficit" : "maintenance" },
+                        { label: "Protein", val: `${metrics.protein}`, unit:"g", color: COLORS.accent2, tip: "per day" },
+                        { label: "Water", val: `${dailyWater}`, unit:"L", color: COLORS.purple||COLORS.accent2, tip: "goal" },
+                      ].map(({ label, val, unit, color, tip }) => (
+                        <div key={label} style={{ background: `${color}10`, border: `1px solid ${color}25`, borderRadius: 12, padding: "10px 14px", flex: 1, minWidth: 90 }}>
+                          <div style={{ fontSize: 10, color: COLORS.muted, fontWeight: 600, letterSpacing:"0.04em", marginBottom:2 }}>{label.toUpperCase()}</div>
+                          <div style={{ fontSize: 18, fontWeight: 800, color, lineHeight:1.1 }}>{val}<span style={{ fontSize:11, fontWeight:500, marginLeft:2 }}>{unit}</span></div>
+                          <div style={{ fontSize: 10, color: COLORS.muted, marginTop:2 }}>{tip}</div>
                         </div>
                       ))}
                     </div>
                   );
                 })()}
-                <button onClick={() => exportTodayPDF(timeline, smartTimes, currentUser, dailyWater, profile)} style={{ background: `linear-gradient(135deg, ${COLORS.accent3}, ${COLORS.warn})`, border: "none", borderRadius: 10, padding: "9px 18px", color: "#fff", fontWeight: 600, fontSize: 13, cursor: "pointer", fontFamily: FONTS.body, display: "flex", alignItems: "center", gap: 6, alignSelf: "flex-start" }}>
+                <button onClick={() => exportTodayPDF(timeline, smartTimes, currentUser, dailyWater, profile)} style={{ ...S.btnSm, display:"flex", alignItems:"center", gap:5, alignSelf:"flex-start", padding:"9px 16px", fontSize:12, borderRadius:10, color:COLORS.muted }}>
                   ⬇ PDF
                 </button>
               </div>
               {/* Smart Meal Times Card */}
-              <div style={{ ...S.metricCard, marginBottom: "1rem", background: `${COLORS.accent2}11`, border: `1px solid ${COLORS.accent2}33` }}>
-                <div style={{ fontFamily: FONTS.head, fontSize: 15, fontWeight: 700, marginBottom: 12, color: COLORS.accent2 }}>Your Smart Meal Schedule</div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 }}>
+              <div style={{ ...S.metricCard, marginBottom: "1rem", borderRadius:16 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12, color: COLORS.text }}>🕐 Today's Meal Schedule</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 8 }}>
                   {[
                     { label: "Breakfast", time: smartTimes.breakfast, icon: "🌅" },
                     { label: "Lunch", time: smartTimes.lunch, icon: "☀️" },
                     { label: "Snack", time: smartTimes.eveningSnack, icon: "🍎" },
                     { label: "Dinner", time: smartTimes.dinner, icon: "🌙" },
-                    { label: "Daily Water", time: `${dailyWater} L`, icon: "💧" },
+                    { label: "Water", time: `${dailyWater} L`, icon: "💧" },
                     ...(smartTimes.preWorkout ? [{ label: "Pre-Workout", time: smartTimes.preWorkout, icon: "💪" }] : []),
                   ].map(({ label, time, icon }) => (
-                    <div key={label} style={{ background: COLORS.card, borderRadius: 10, padding: "10px 12px", textAlign: "center" }}>
-                      <div style={{ fontSize: 18, marginBottom: 4 }}>{icon}</div>
-                      <div style={{ fontSize: 11, color: COLORS.muted, marginBottom: 2 }}>{label.toUpperCase()}</div>
-                      <div style={{ fontSize: 16, fontWeight: 700, color: COLORS.accent2 }}>{time}</div>
+                    <div key={label} style={{ background: isDark ? "rgba(255,255,255,0.03)" : COLORS.card2, borderRadius: 12, padding: "10px 10px", textAlign: "center", border:`1px solid ${COLORS.border}` }}>
+                      <div style={{ fontSize: 20, marginBottom: 4 }}>{icon}</div>
+                      <div style={{ fontSize: 10, color: COLORS.muted, marginBottom: 2, fontWeight:600, letterSpacing:"0.03em" }}>{label.toUpperCase()}</div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text }}>{time}</div>
                     </div>
                   ))}
                 </div>
-                <div style={{ fontSize: 12, color: COLORS.muted, marginTop: 10 }}>
-                  Times calculated from your schedule · Wake: {smartTimes.wakeTime} · Sleep: {smartTimes.sleepTime}
+                <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 10, lineHeight:1.5 }}>
+                  Based on your schedule · Wake {smartTimes.wakeTime} · Sleep {smartTimes.sleepTime}
                 </div>
               </div>
 
@@ -11220,34 +11220,42 @@ function App() {
           {/* Bottom nav + More drawer */}
           <div style={S.bottomNav}>
             {[
-              ["today", "📅", "Today"], 
-              ["meals", "🍽️", "Meals"], 
-              ["logs", "📋", "Track"], 
+              ["today", "📅", "Today"],
+              ["meals", "🍽️", "Meals"],
+              ["logs", "📋", "Track"],
               ["settings", "⚙️", "Settings"],
               ["more", "➕", "More"]
-            ].map(([k, ic, lb]) => (
-              <motion.button key={k} 
-                onClick={() => { 
+            ].map(([k, ic, lb]) => {
+              const isActive = dashTab===k || (k==="more" && showMoreMenu);
+              return (
+              <motion.button key={k}
+                onClick={() => {
                   if (k === "more") {
                     setShowMoreMenu(true);
                   } else {
-                    setDashTab(k); 
-                    setShowMoreMenu(false); 
+                    setDashTab(k);
+                    setShowMoreMenu(false);
                   }
                 }}
-                whileTap={{ scale: 0.85 }}
-                style={{ flex:1, background:"none", border:"none", padding:"12px 2px 10px",
+                whileTap={{ scale: 0.88 }}
+                style={{ flex:1, background:"none", border:"none", padding:"10px 2px 9px",
                   cursor:"pointer", display:"flex", flexDirection:"column",
-                  alignItems:"center", gap:4,
-                  color: (dashTab===k || (k==="more" && showMoreMenu)) ? COLORS.accent : COLORS.muted,
-                  fontSize:11, fontFamily:FONTS.body, fontWeight: (dashTab===k || (k==="more" && showMoreMenu)) ? 600 : 400 }}>
+                  alignItems:"center", gap:3, position:"relative",
+                  color: isActive ? COLORS.accent : COLORS.muted,
+                  fontSize:10, fontFamily:FONTS.body, fontWeight: isActive ? 700 : 400 }}>
+                {/* Active indicator dot */}
+                {isActive && (
+                  <div style={{ position:"absolute", top:0, left:"50%", transform:"translateX(-50%)",
+                    width:28, height:2, borderRadius:2, background:COLORS.accent }} />
+                )}
                 <motion.span
-                  animate={{ scale: (dashTab===k || (k==="more" && showMoreMenu)) ? 1.15 : 1 }}
-                  transition={{ type:"spring", stiffness:400, damping:20 }}
-                  style={{ fontSize:22, lineHeight:1.1, marginBottom:4 }}>{ic}</motion.span>
-                <span>{lb}</span>
+                  animate={{ scale: isActive ? 1.12 : 1 }}
+                  transition={{ type:"spring", stiffness:400, damping:22 }}
+                  style={{ fontSize:22, lineHeight:1.1, marginBottom:2 }}>{ic}</motion.span>
+                <span style={{ fontSize:10, letterSpacing:"0.01em" }}>{lb}</span>
               </motion.button>
-            ))}
+              );
+            })}
           </div>
 
           <AnimatePresence>
@@ -11259,25 +11267,29 @@ function App() {
             <motion.div style={S.drawer}
               initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
               transition={{ type:"spring", stiffness:380, damping:32 }}>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
-                <div style={{ fontFamily:FONTS.head, fontWeight:700, fontSize:15, color:COLORS.text }}>More</div>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+                <div style={{ fontWeight:700, fontSize:16, color:COLORS.text }}>More screens</div>
                 <button onClick={() => setShowMoreMenu(false)}
-                  style={{ ...S.btnSm, borderRadius:20, padding:"4px 14px" }}>✕</button>
+                  style={{ ...S.btnSm, borderRadius:20, padding:"5px 14px", fontSize:13 }}>✕ Close</button>
               </div>
-              <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10 }}>
-                {[["progress","📈","Progress"],["metrics","📊","Metrics"],["steps","👟","Steps"],["insights","🤖","AI Insights"],
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8 }}>
+                {[["progress","📈","Progress"],["metrics","📊","Metrics"],["steps","👟","Steps"],["insights","🤖","AI"],
                   ["workout","💪","Workout"],["challenges","🏆","Challenges"],
-                  ["friends","👥","Friends"],["foodscore","🥗","Food Score"]].map(([k,ic,lb]) => (
+                  ["friends","👥","Friends"],["foodscore","🥗","Food Score"]].map(([k,ic,lb]) => {
+                  const isAct = dashTab===k;
+                  return (
                   <button key={k} onClick={() => { setDashTab(k); setShowMoreMenu(false); }}
-                    style={{ background:dashTab===k?`${COLORS.accent}18`:isDark?"rgba(255,255,255,0.04)":"rgba(255,255,255,0.5)",
-                      border:`1px solid ${dashTab===k?COLORS.accent+"44":COLORS.border}`,
-                      borderRadius:12, padding:"12px 4px", cursor:"pointer",
-                      display:"flex", flexDirection:"column", alignItems:"center", gap:6 }}>
+                    style={{ background: isAct ? `${COLORS.accent}18` : isDark ? "rgba(255,255,255,0.03)" : C.card2,
+                      border:`1px solid ${isAct ? COLORS.accent+"50" : COLORS.border}`,
+                      borderRadius:14, padding:"14px 4px", cursor:"pointer",
+                      display:"flex", flexDirection:"column", alignItems:"center", gap:6,
+                      transition:"all 0.15s" }}>
                     <span style={{ fontSize:26 }}>{ic}</span>
-                    <span style={{ fontSize:10, color:dashTab===k?COLORS.accent:COLORS.muted,
-                      fontWeight:dashTab===k?700:400, textAlign:"center", lineHeight:1.3 }}>{lb}</span>
+                    <span style={{ fontSize:10, color:isAct ? COLORS.accent : COLORS.muted,
+                      fontWeight:isAct ? 700 : 500, textAlign:"center", lineHeight:1.3 }}>{lb}</span>
                   </button>
-                ))}
+                  );
+                })}
               </div>
             </motion.div>
           </>}

@@ -5,26 +5,24 @@ const LOGO_SRC = "data:image/png;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BS
 
 
 const COLORS = {
-  bg: "#0a0a0a", // Deep OLED black
-  card: "#121212", // Elevated dark
-  card2: "#1a1a1a",
-  card3: "#222222",
-  border: "rgba(255,255,255,0.08)",
-  accent: "#DFFF00", // High-visibility chartreuse/neon lime
-  accent2: "#A5FF00",
-  accent3: "#FFFFFF",
-  warn: "#FF3366",
-  text: "#FFFFFF",
-  muted: "#888888",
-  success: "#DFFF00",
-  purple: "#888888", // Removed purple, mapped to neutral
-  gold: "#FFD700",
-  glass: "#121212", // Replaced glass with solid flat for premium feel
-  glassBorder: "rgba(255, 255, 255, 0.08)",
-  glassHighlight: "rgba(255, 255, 255, 0.02)",
-  mesh1: "#0a0a0a",
-  mesh2: "#0a0a0a",
-  mesh3: "#0a0a0a",
+  bg:             "#0F172A",  // Deep navy-slate
+  card:           "#1E293B",
+  card2:          "#334155",
+  card3:          "#475569",
+  border:         "rgba(148,163,184,0.12)",
+  accent:         "#10B981",  // Emerald green — health, vitality
+  accent2:        "#34D399",  // Lighter emerald
+  accent3:        "#F59E0B",  // Amber
+  warn:           "#F87171",
+  text:           "#F1F5F9",
+  muted:          "#94A3B8",
+  success:        "#10B981",
+  purple:         "#818CF8",
+  gold:           "#FBBF24",
+  glass:          "#1E293B",
+  glassBorder:    "rgba(148,163,184,0.12)",
+  glassHighlight: "rgba(255,255,255,0.03)",
+  mesh1: "#0F172A", mesh2: "#0F172A", mesh3: "#0F172A",
 };
 const FONTS = { head: "'Syne', sans-serif", body: "'Inter', 'DM Sans', sans-serif" };
 

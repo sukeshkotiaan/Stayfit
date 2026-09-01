@@ -73,10 +73,10 @@ export default function OnboardScreen({
       <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
       <style>{`
         * { box-sizing:border-box; -webkit-font-smoothing:antialiased; }
-        select option { background:#0e1628; color:#eef2ff; }
-        @keyframes fadeSlide { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
-        @keyframes popIn { from { transform:scale(0.8); opacity:0; } to { transform:scale(1); opacity:1; } }
-        .ob-fade { animation: fadeSlide 0.35s ease forwards; }
+        select option { background:${isDark?"#1E293B":"#ffffff"}; color:${isDark?"#F1F5F9":"#0F172A"}; }
+        @keyframes fadeSlide { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes popIn { from { transform:scale(0.85); opacity:0; } to { transform:scale(1); opacity:1; } }
+        .ob-fade { animation: fadeSlide 0.3s ease forwards; }
         .ob-pop { animation: popIn 0.4s cubic-bezier(.34,1.56,.64,1) forwards; }
       `}</style>
 
@@ -112,8 +112,8 @@ export default function OnboardScreen({
 
         {/* Card */}
         <div className="ob-fade" key={onboardStep}
-          style={{ background:COLORS.card, border:`1px solid ${COLORS.border}`, borderRadius:24,
-            padding:"28px 24px", boxShadow: isDark ? "0 20px 60px rgba(0,0,0,0.5)" : "0 20px 60px rgba(99,130,191,0.15)" }}>
+          style={{ background:COLORS.card, border:`1px solid ${COLORS.border}`, borderRadius:20,
+            padding:"28px 24px", boxShadow: isDark ? "0 8px 40px rgba(0,0,0,0.5)" : "0 8px 32px rgba(15,23,42,0.08)" }}>
 
           {/* Step header */}
           <div style={{ textAlign:"center", marginBottom:24 }}>
@@ -127,10 +127,10 @@ export default function OnboardScreen({
             <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
               {QUICK_GOALS.map(g => (
                 <button key={g.label} onClick={() => { setOnboard(p => ({ ...p, goal: g.label })); setOnboardStep(1); }}
-                  style={{ display:"flex", alignItems:"center", gap:14, padding:"16px 18px", borderRadius:16, cursor:"pointer",
-                    border:`2px solid ${onboard.goal === g.label ? COLORS.accent : COLORS.border}`,
-                    background: onboard.goal === g.label ? `linear-gradient(135deg, ${COLORS.accent}18, ${COLORS.accent2}18)` : COLORS.card2,
-                    transition:"all 0.2s", textAlign:"left" }}>
+                  style={{ display:"flex", alignItems:"center", gap:14, padding:"16px 18px", borderRadius:14, cursor:"pointer",
+                    border:`1.5px solid ${onboard.goal === g.label ? COLORS.accent : COLORS.border}`,
+                    background: onboard.goal === g.label ? `${COLORS.accent}12` : isDark ? "rgba(255,255,255,0.03)" : COLORS.card2,
+                    transition:"all 0.15s", textAlign:"left" }}>
                   <span style={{ fontSize:28, flexShrink:0 }}>{g.emoji}</span>
                   <div style={{ flex:1 }}>
                     <div style={{ fontSize:15, fontWeight:700, color:COLORS.text }}>{g.label}</div>
@@ -303,9 +303,7 @@ export default function OnboardScreen({
               </div>
 
               <button onClick={() => setScreen("dashboard")}
-                style={{ ...S.btn, padding:"16px", fontSize:16, fontWeight:800, borderRadius:16,
-                  background:`linear-gradient(135deg, ${COLORS.accent}, ${COLORS.accent2})`,
-                  boxShadow:`0 8px 24px ${COLORS.accent}44` }}>
+                style={{ ...S.btn, padding:"16px", fontSize:16, fontWeight:800, borderRadius:14 }}>
                 Let's Go! →
               </button>
               <div style={{ fontSize:12, color:COLORS.muted, marginTop:12 }}>
